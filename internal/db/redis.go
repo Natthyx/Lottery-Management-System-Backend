@@ -3,33 +3,25 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 )
 
-// NewRedis creates and validates a Redis client connection.
-//
-// Redis serves two purposes in this system:
-//  1. Distributed locks  — preventing race conditions on booking
-//  2. Capacity counters  — fast atomic INCR/DECR without touching Postgres
-//
-// WHY Redis locks over Postgres advisory locks:
-//   Redis SETNX is atomic and auto-expires via TTL, so a crashed process
-//   never leaves a lock dangling permanently.
-func NewRedis(ctx context.Context, addr, password string, dbIndex int) (*redis.Client, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr:         addr,
-		Password:     password,
-		DB:           dbIndex,
-		PoolSize:     20,
-		MinIdleConns: 5,
-	})
+// NewRedis builds a *redis.Client from pre-parsed options and verifies
+// connectivity. Returning the error (instead of falling through) lets
+// the bootstrap fail fast on misconfiguration.
+func NewRedis(ctx context.Context, opts *redis.Options) (*redis.Client, error) {
+	client := redis.NewClient(opts)
 
-	if err := client.Ping(ctx).Err(); err != nil {
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := client.Ping(pingCtx).Err(); err != nil {
+		_ = client.Close()
 		return nil, fmt.Errorf("pinging Redis: %w", err)
 	}
 
-	log.Info().Str("addr", addr).Msg("Redis connection established")
+	log.Info().Str("addr", opts.Addr).Int("db", opts.DB).Msg("Redis connection established")
 	return client, nil
 }

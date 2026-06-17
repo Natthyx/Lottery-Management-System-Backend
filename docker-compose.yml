@@ -1,20 +1,17 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: lottery_postgres
     environment:
-      POSTGRES_USER: lottery
-      POSTGRES_PASSWORD: lottery_secret
-      POSTGRES_DB: lottery_db
+      POSTGRES_USER: ${POSTGRES_USER:-lottery}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lottery_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-lottery_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lottery -d lottery_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lottery} -d ${POSTGRES_DB:-lottery_db}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,7 +20,7 @@ services:
     image: redis:7-alpine
     container_name: lottery_redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     command: redis-server --save 60 1 --loglevel warning
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -37,19 +34,33 @@ services:
       dockerfile: Dockerfile
     container_name: lottery_app
     environment:
-      PRETTY: "true"
-      DATABASE_URL: postgres://lottery:lottery_secret@postgres:5432/lottery_db?sslmode=disable
-      REDIS_ADDR: redis:6379
-      JWT_SECRET: super-secret-jwt-key-change-in-production
+      PRETTY: "${PRETTY:-false}"
+      ENV: "${ENV:-production}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-lottery}:${POSTGRES_PASSWORD:-lottery_secret}@postgres:5432/${POSTGRES_DB:-lottery_db}?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+      # Required. No default — fail loudly if not supplied.
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required}"
+      JWT_EXPIRY: "${JWT_EXPIRY:-24h}"
       PORT: "8080"
+      MIGRATE_ON_START: "${MIGRATE_ON_START:-true}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-}"
+      AUTH_RATE_LIMIT_REQUESTS: "${AUTH_RATE_LIMIT_REQUESTS:-10}"
+      API_RATE_LIMIT_REQUESTS: "${API_RATE_LIMIT_REQUESTS:-100}"
+      BOOTSTRAP_ADMIN_EMAIL: "${BOOTSTRAP_ADMIN_EMAIL:-}"
+      BOOTSTRAP_ADMIN_PASSWORD: "${BOOTSTRAP_ADMIN_PASSWORD:-}"
+      BOOTSTRAP_ADMIN_NAME: "${BOOTSTRAP_ADMIN_NAME:-System Admin}"
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+    # Distroless has no shell/curl, so we don't define a container-level
+    # healthcheck. The /health and /ready HTTP endpoints are intended for
+    # Kubernetes liveness / readiness probes.
 
 volumes:
   postgres_data:

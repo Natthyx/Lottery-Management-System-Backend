@@ -56,7 +56,7 @@ func TestFairShuffle_UniformDistribution(t *testing.T) {
 		n         = 5
 		trials    = 10_000
 		expected  = float64(trials) / float64(n) // 2000 per position
-		tolerance = 0.05                          // 5% deviation allowed
+		tolerance = 0.05                         // 5% deviation allowed
 	)
 
 	counts := make([][]int, n)

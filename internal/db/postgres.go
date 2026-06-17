@@ -11,16 +11,9 @@ import (
 
 // NewPool creates a production-grade PostgreSQL connection pool.
 //
-// WHY pgxpool instead of database/sql:
-//   - pgxpool is purpose-built for PostgreSQL and uses the binary protocol
-//     (faster than the text protocol used by lib/pq)
-//   - Built-in connection health checks and automatic reconnection
-//   - First-class support for PostgreSQL-specific types (arrays, JSONB, etc.)
-//
-// Pool sizing rationale:
-//   MaxConns = 25 — with multiple app replicas each capped at 25,
-//   we leave room for migrations, monitoring agents, and admin queries
-//   within Postgres's default max_connections of 100.
+// pgxpool sizing rationale: with multiple app replicas each capped at 25,
+// we leave room for migrations, monitoring, and admin queries within
+// Postgres's default max_connections of 100.
 func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
@@ -38,8 +31,10 @@ func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("creating connection pool: %w", err)
 	}
 
-	// Fail fast — verify connectivity at startup, not on first request
-	if err := pool.Ping(ctx); err != nil {
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 

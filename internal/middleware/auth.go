@@ -3,11 +3,13 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/rs/zerolog/log"
+
+	"github.com/Natthyx/lottery-system/internal/httpx"
 )
 
 type contextKey string
@@ -24,15 +26,18 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateToken creates a signed JWT for a given user (HMAC-SHA256).
+// GenerateToken creates a signed JWT (HMAC-SHA256) for a given user.
 func GenerateToken(userID int64, role, secret string, expiry time.Duration) (string, error) {
+	now := time.Now()
 	claims := &Claims{
 		UserID: userID,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(now.Add(expiry)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    "lottery-system",
+			Subject:   subjectFromUserID(userID),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -42,31 +47,33 @@ func GenerateToken(userID int64, role, secret string, expiry time.Duration) (str
 // Authenticate validates the JWT in the Authorization header and injects
 // user_id and role into the request context.
 func Authenticate(secret string) func(http.Handler) http.Handler {
+	keyFunc := func(t *jwt.Token) (interface{}, error) {
+		// Guard against "alg: none" and any non-HMAC token.
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(secret), nil
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				writeUnauthorized(w, "missing Authorization header")
+				httpx.Unauthorized(w, "missing Authorization header")
 				return
 			}
-
 			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				writeUnauthorized(w, "malformed Authorization header")
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || parts[1] == "" {
+				httpx.Unauthorized(w, "malformed Authorization header")
 				return
 			}
 
 			claims := &Claims{}
-			token, err := jwt.ParseWithClaims(parts[1], claims, func(t *jwt.Token) (interface{}, error) {
-				// Guard against "alg: none" attacks
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, jwt.ErrSignatureInvalid
-				}
-				return []byte(secret), nil
-			})
-
+			token, err := jwt.ParseWithClaims(parts[1], claims, keyFunc,
+				jwt.WithValidMethods([]string{"HS256"}),
+				jwt.WithIssuer("lottery-system"),
+			)
 			if err != nil || !token.Valid {
-				writeUnauthorized(w, "invalid or expired token")
+				httpx.Unauthorized(w, "invalid or expired token")
 				return
 			}
 
@@ -82,7 +89,7 @@ func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role, ok := r.Context().Value(ContextKeyRole).(string)
 		if !ok || role != "admin" {
-			http.Error(w, `{"success":false,"error":"forbidden: admin only"}`, http.StatusForbidden)
+			httpx.Forbidden(w, "forbidden: admin only")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -95,47 +102,12 @@ func GetUserID(ctx context.Context) (int64, bool) {
 	return id, ok
 }
 
-// Logger logs every request with method, path, status, and latency.
-func Logger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		wrapped := &responseWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(wrapped, r)
-		log.Info().
-			Str("method", r.Method).
-			Str("path", r.URL.Path).
-			Int("status", wrapped.status).
-			Dur("latency_ms", time.Since(start)).
-			Str("remote_addr", r.RemoteAddr).
-			Msg("request")
-	})
+// GetRole extracts the authenticated user role from context.
+func GetRole(ctx context.Context) (string, bool) {
+	r, ok := ctx.Value(ContextKeyRole).(string)
+	return r, ok
 }
 
-type responseWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.status = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-// Recoverer catches panics and returns 500 instead of crashing.
-func Recoverer(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rec := recover(); rec != nil {
-				log.Error().Interface("panic", rec).Msg("recovered from panic")
-				http.Error(w, `{"success":false,"error":"internal server error"}`, http.StatusInternalServerError)
-			}
-		}()
-		next.ServeHTTP(w, r)
-	})
-}
-
-func writeUnauthorized(w http.ResponseWriter, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte(`{"success":false,"error":"` + msg + `"}`)) //nolint:errcheck
+func subjectFromUserID(id int64) string {
+	return "user:" + strconv.FormatInt(id, 10)
 }

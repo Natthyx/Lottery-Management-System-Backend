@@ -1,13 +1,14 @@
 package booking
 
 import (
-	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/natannan/lottery-system/internal/middleware"
-	"github.com/natannan/lottery-system/internal/models"
+
+	"github.com/Natthyx/lottery-system/internal/httpx"
+	"github.com/Natthyx/lottery-system/internal/middleware"
 )
 
 // Handler wires HTTP routes to the booking Service.
@@ -19,70 +20,67 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) Routes() func(chi.Router) {
-	return func(r chi.Router) {
-		// Book an event (authenticated users)
-		r.Post("/events/{eventID}/book", h.Book)
-
-		// My bookings
-		r.Get("/me/bookings", h.MyBookings)
-	}
-}
-
 // Book godoc
-// POST /events/{eventID}/book
-// Auth: user JWT required
+// POST /events/{eventID}/book  (authenticated)
 func (h *Handler) Book(w http.ResponseWriter, r *http.Request) {
 	eventID, err := strconv.ParseInt(chi.URLParam(r, "eventID"), 10, 64)
-	if err != nil {
-		respond(w, http.StatusBadRequest, false, nil, "invalid event id")
+	if err != nil || eventID <= 0 {
+		httpx.BadRequest(w, "invalid event id")
 		return
 	}
-
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {
-		respond(w, http.StatusUnauthorized, false, nil, "unauthenticated")
+		httpx.Unauthorized(w, "unauthenticated")
 		return
 	}
 
 	if err := h.service.BookWithLock(r.Context(), eventID, userID); err != nil {
-		// 409 Conflict is the correct status for "already booked" or "event busy"
-		respond(w, http.StatusConflict, false, nil, err.Error())
+		switch {
+		case errors.Is(err, ErrEventBusy), errors.Is(err, ErrAlreadyBooked),
+			errors.Is(err, ErrEventNotOpen), errors.Is(err, ErrEventFull):
+			httpx.Conflict(w, err.Error())
+		case errors.Is(err, ErrEventNotFound):
+			httpx.NotFound(w, err.Error())
+		case errors.Is(err, ErrInvalidInput):
+			httpx.BadRequest(w, err.Error())
+		default:
+			httpx.Internal(w, "could not create booking")
+		}
 		return
 	}
-
-	respond(w, http.StatusCreated, true, map[string]string{
+	httpx.Respond(w, http.StatusCreated, true, map[string]string{
 		"message": "booking confirmed — you are now eligible for the lottery",
 	}, "")
 }
 
 // MyBookings godoc
-// GET /me/bookings
-// Auth: user JWT required
+// GET /me/bookings  (authenticated)
 func (h *Handler) MyBookings(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {
-		respond(w, http.StatusUnauthorized, false, nil, "unauthenticated")
+		httpx.Unauthorized(w, "unauthenticated")
 		return
 	}
-
-	eventIDs, err := h.service.UserBookings(r.Context(), userID)
+	bookings, err := h.service.UserBookings(r.Context(), userID)
 	if err != nil {
-		respond(w, http.StatusInternalServerError, false, nil, "failed to fetch bookings")
+		httpx.Internal(w, "failed to fetch bookings")
 		return
 	}
-
-	respond(w, http.StatusOK, true, map[string]interface{}{
-		"booked_event_ids": eventIDs,
-	}, "")
+	httpx.Respond(w, http.StatusOK, true, bookings, "")
 }
 
-func respond(w http.ResponseWriter, status int, success bool, data interface{}, errMsg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(models.APIResponse{ //nolint:errcheck
-		Success: success,
-		Data:    data,
-		Error:   errMsg,
-	})
+// ListByEvent godoc
+// GET /events/{eventID}/bookings  (admin)
+func (h *Handler) ListByEvent(w http.ResponseWriter, r *http.Request) {
+	eventID, err := strconv.ParseInt(chi.URLParam(r, "eventID"), 10, 64)
+	if err != nil || eventID <= 0 {
+		httpx.BadRequest(w, "invalid event id")
+		return
+	}
+	bookings, err := h.service.GetByEvent(r.Context(), eventID)
+	if err != nil {
+		httpx.Internal(w, "failed to fetch bookings")
+		return
+	}
+	httpx.Respond(w, http.StatusOK, true, bookings, "")
 }

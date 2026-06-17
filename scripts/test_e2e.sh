@@ -1,209 +1,154 @@
 #!/usr/bin/env bash
 # ============================================================
-# LOTTERY SYSTEM — END-TO-END TEST SCRIPT
-# Usage: bash scripts/test_e2e.sh
+# Lottery System — full E2E test (no docker exec required)
+# Drives the public HTTP API only. Relies on a bootstrap admin
+# created by setting BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD
+# in the server's environment before startup.
 # ============================================================
 
 set -euo pipefail
 
-BASE_URL="http://localhost:8080"
+BASE_URL="${BASE_URL:-http://localhost:8080}"
+ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-admin@lottery.local}"
+ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-Admin1234!ChangeMe}"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-PASS=0
-FAIL=0
+PASS=0; FAIL=0
 
 log()  { echo -e "\n${BLUE}[TEST]${NC} $1"; }
 ok()   { echo -e "${GREEN}[PASS]${NC} $1"; PASS=$((PASS+1)); }
-fail() { echo -e "${RED}[FAIL]${NC} $1 — response: $2"; FAIL=$((FAIL+1)); }
-info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
+fail() { echo -e "${RED}[FAIL]${NC} $1\n${YELLOW}response:${NC} $2"; FAIL=$((FAIL+1)); }
 
-request() {
-  local METHOD="$1"
-  local ENDPOINT="$2"
-  local BODY="${3:-}"
-  local TOKEN="${4:-}"
-  local ARGS=(-s -X "$METHOD" "${BASE_URL}${ENDPOINT}" -H "Content-Type: application/json")
-  [ -n "$TOKEN" ] && ARGS+=(-H "Authorization: Bearer $TOKEN")
-  [ -n "$BODY" ]  && ARGS+=(-d "$BODY")
-  curl "${ARGS[@]}"
+call() {
+  local method="$1" path="$2" token="${3:-}" body="${4:-}"
+  local args=(-s -X "$method" "${BASE_URL}${path}" -H "Content-Type: application/json")
+  [[ -n "$token" ]] && args+=(-H "Authorization: Bearer $token")
+  [[ -n "$body"  ]] && args+=(-d "$body")
+  curl "${args[@]}"
 }
 
-extract() {
-  echo "$1" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d$2)" 2>/dev/null || echo ""
-}
+j() { jq -r "$2" <<<"$1"; }
 
-pretty() { echo "$1" | python3 -m json.tool 2>/dev/null || echo "$1"; }
+# ── 1. Health ───────────────────────────────────────────────
+log "1. /health"
+RESP=$(call GET /health)
+[[ "$(j "$RESP" '.status')" == "ok" ]] && ok "alive" || { fail "alive" "$RESP"; exit 1; }
 
-is_success() { echo "$1" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('success') else 1)" 2>/dev/null; }
-is_failure()  { echo "$1" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('success') else 1)" 2>/dev/null; }
+# ── 2. Readiness ────────────────────────────────────────────
+log "2. /ready"
+RESP=$(call GET /ready)
+[[ "$(j "$RESP" '.status')" == "ok" ]] && ok "ready" || fail "ready" "$RESP"
 
-echo ""
-echo "=================================================="
-echo "  LOTTERY SYSTEM — END-TO-END TESTS"
-echo "=================================================="
+# ── 3. Admin login ──────────────────────────────────────────
+log "3. login admin"
+RESP=$(call POST /auth/login "" "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
+ADMIN_TOKEN=$(j "$RESP" '.data.token')
+if [[ -n "$ADMIN_TOKEN" && "$ADMIN_TOKEN" != "null" ]]; then ok "admin token"
+else fail "admin login (is BOOTSTRAP_ADMIN_EMAIL/PASSWORD set in the server env?)" "$RESP"; exit 1; fi
 
-# ── 1. Health ─────────────────────────────────────────────────────────────────
-log "1. Health check"
-RESP=$(request GET /health)
-pretty "$RESP"
-if echo "$RESP" | grep -q '"ok"'; then
-  ok "Server is healthy"
-else
-  fail "Server not responding" "$RESP"; exit 1
-fi
+# ── 4. Register user ────────────────────────────────────────
+TS=$(date +%s)
+USER_EMAIL="user_${TS}@lottery.test"
+log "4. register user $USER_EMAIL"
+RESP=$(call POST /auth/register "" "{\"email\":\"$USER_EMAIL\",\"password\":\"userpass123\",\"full_name\":\"Alice $TS\"}")
+USER_ID=$(j "$RESP" '.data.id')
+[[ -n "$USER_ID" && "$USER_ID" != "null" ]] && ok "user $USER_ID" || fail "register" "$RESP"
 
-# ── 2. Register admin ─────────────────────────────────────────────────────────
-log "2. Register admin user"
-ADMIN_EMAIL="admin_$(date +%s)@lottery.com"
-RESP=$(request POST /auth/register "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"adminpass123\",\"full_name\":\"System Admin\"}")
-pretty "$RESP"
-ADMIN_ID=$(extract "$RESP" "['data']['id']")
-if is_success "$RESP" && [ -n "$ADMIN_ID" ]; then
-  ok "Admin registered (id: $ADMIN_ID)"
-else
-  fail "Admin registration" "$RESP"
-fi
+# ── 5. Login user ───────────────────────────────────────────
+log "5. login user"
+RESP=$(call POST /auth/login "" "{\"email\":\"$USER_EMAIL\",\"password\":\"userpass123\"}")
+USER_TOKEN=$(j "$RESP" '.data.token')
+[[ -n "$USER_TOKEN" && "$USER_TOKEN" != "null" ]] && ok "user token" || { fail "user login" "$RESP"; exit 1; }
 
-# ── 3. Register user ──────────────────────────────────────────────────────────
-log "3. Register regular user"
-USER_EMAIL="user_$(date +%s)@lottery.com"
-RESP=$(request POST /auth/register "{\"email\":\"$USER_EMAIL\",\"password\":\"userpass123\",\"full_name\":\"Alice Wonderland\"}")
-pretty "$RESP"
-USER_ID=$(extract "$RESP" "['data']['id']")
-if is_success "$RESP" && [ -n "$USER_ID" ]; then
-  ok "User registered (id: $USER_ID)"
-else
-  fail "User registration" "$RESP"
-fi
+# ── 6. /auth/me ─────────────────────────────────────────────
+log "6. /auth/me"
+RESP=$(call GET /auth/me "$USER_TOKEN")
+[[ "$(j "$RESP" '.data.email')" == "$USER_EMAIL" ]] && ok "me ok" || fail "me" "$RESP"
 
-# ── 4. Promote admin ──────────────────────────────────────────────────────────
-log "4. Promoting admin in database"
-docker exec lottery_postgres psql -U lottery -d lottery_db \
-  -c "UPDATE users SET role = 'admin' WHERE email = '$ADMIN_EMAIL';" 2>/dev/null
-ok "Admin promoted to role=admin"
-
-# ── 5. Login admin ────────────────────────────────────────────────────────────
-log "5. Login as admin"
-RESP=$(request POST /auth/login "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"adminpass123\"}")
-pretty "$RESP"
-ADMIN_TOKEN=$(extract "$RESP" "['data']['token']")
-if is_success "$RESP" && [ -n "$ADMIN_TOKEN" ]; then
-  ok "Admin token obtained (role: admin)"
-else
-  fail "Admin login" "$RESP"; exit 1
-fi
-
-# ── 6. Login user ─────────────────────────────────────────────────────────────
-log "6. Login as regular user"
-RESP=$(request POST /auth/login "{\"email\":\"$USER_EMAIL\",\"password\":\"userpass123\"}")
-USER_TOKEN=$(extract "$RESP" "['data']['token']")
-if is_success "$RESP" && [ -n "$USER_TOKEN" ]; then
-  ok "User token obtained"
-else
-  fail "User login" "$RESP"; exit 1
-fi
-
-# ── 7. Create event ───────────────────────────────────────────────────────────
-log "7. Create lottery event (admin only)"
+# ── 7. Create event ─────────────────────────────────────────
+log "7. create event"
 DRAW_AT=$(python3 -c "from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
-RESP=$(request POST /events \
-  "{\"title\":\"Bloomberg Internship Lottery\",\"description\":\"Win a spot\",\"capacity\":500,\"draw_at\":\"$DRAW_AT\",\"winner_count\":3}" \
-  "$ADMIN_TOKEN")
-pretty "$RESP"
-EVENT_ID=$(extract "$RESP" "['data']['id']")
-if is_success "$RESP" && [ -n "$EVENT_ID" ]; then
-  ok "Event created (id: $EVENT_ID, winner_count: 3)"
+RESP=$(call POST /events "$ADMIN_TOKEN" "{\"title\":\"E2E Event $TS\",\"description\":\"win a spot\",\"capacity\":5,\"draw_at\":\"$DRAW_AT\",\"winner_count\":2}")
+EVENT_ID=$(j "$RESP" '.data.id')
+[[ -n "$EVENT_ID" && "$EVENT_ID" != "null" ]] && ok "event $EVENT_ID" || { fail "create event" "$RESP"; exit 1; }
+
+# ── 8. Non-admin cannot create event ────────────────────────
+log "8. non-admin POST /events must be 403"
+RESP=$(call POST /events "$USER_TOKEN" "{\"title\":\"Nope\",\"capacity\":1,\"draw_at\":\"$DRAW_AT\"}")
+[[ "$(j "$RESP" '.success')" == "false" ]] && ok "forbidden enforced" || fail "RBAC" "$RESP"
+
+# ── 9. List events ──────────────────────────────────────────
+log "9. list events"
+RESP=$(call GET /events)
+[[ "$(j "$RESP" '.success')" == "true" ]] && ok "listed" || fail "list events" "$RESP"
+
+# ── 10. Book ────────────────────────────────────────────────
+log "10. book event"
+RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
+[[ "$(j "$RESP" '.success')" == "true" ]] && ok "booked" || fail "book" "$RESP"
+
+# ── 11. Duplicate booking ───────────────────────────────────
+log "11. duplicate booking rejected"
+RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
+[[ "$(j "$RESP" '.success')" == "false" ]] && ok "rejected" || fail "duplicate" "$RESP"
+
+# ── 12. Drawing before close is rejected ────────────────────
+log "12. premature draw rejected"
+RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
+[[ "$(j "$RESP" '.success')" == "false" ]] && ok "premature draw rejected" || fail "premature draw" "$RESP"
+
+# ── 13. Close event ─────────────────────────────────────────
+log "13. close event"
+RESP=$(call PUT "/events/${EVENT_ID}/close" "$ADMIN_TOKEN")
+[[ "$(j "$RESP" '.data.status')" == "closed" ]] && ok "closed" || fail "close" "$RESP"
+
+# ── 14. Booking after close rejected ────────────────────────
+log "14. booking after close rejected"
+RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
+[[ "$(j "$RESP" '.success')" == "false" ]] && ok "rejected" || fail "post-close booking" "$RESP"
+
+# ── 15. Draw ────────────────────────────────────────────────
+log "15. draw"
+RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
+ENTROPY=$(j "$RESP" '.data.winners[0].entropy_source')
+TOTAL=$(j "$RESP" '.data.total_entrants')
+WINNERS=$(j "$RESP" '.data.winners | length')
+WAITLIST=$(j "$RESP" '.data.waitlist | length')
+if [[ "$(j "$RESP" '.success')" == "true" ]]; then
+  ok "drew $WINNERS winner(s), $WAITLIST waitlist, total $TOTAL, entropy=$ENTROPY"
 else
-  fail "Event creation" "$RESP"
+  fail "draw" "$RESP"
 fi
 
-# ── 8. List events ────────────────────────────────────────────────────────────
-log "8. List events (public)"
-RESP=$(request GET /events)
-pretty "$RESP"
-COUNT=$(extract "$RESP" "['meta']['total']")
-if is_success "$RESP"; then
-  ok "Events listed (total: $COUNT)"
-else
-  fail "List events" "$RESP"
-fi
+# ── 16. Idempotent re-draw rejected ─────────────────────────
+log "16. re-draw rejected"
+RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
+[[ "$(j "$RESP" '.success')" == "false" ]] && ok "rejected" || fail "re-draw" "$RESP"
 
-# ── 9. Book event ─────────────────────────────────────────────────────────────
-log "9. Book event as regular user"
-RESP=$(request POST "/events/${EVENT_ID}/book" "" "$USER_TOKEN")
-pretty "$RESP"
-if is_success "$RESP"; then
-  ok "Booking confirmed — user is now in lottery pool"
-else
-  fail "Booking" "$RESP"
-fi
+# ── 17. Results endpoint ────────────────────────────────────
+log "17. results"
+RESP=$(call GET "/events/${EVENT_ID}/results")
+RW=$(j "$RESP" '.data.winners | length')
+RWL=$(j "$RESP" '.data.waitlist | length')
+[[ "$RW" == "$WINNERS" && "$RWL" == "$WAITLIST" ]] && ok "winners/waitlist match draw" || fail "results split" "$RESP"
 
-# ── 10. Duplicate booking ─────────────────────────────────────────────────────
-log "10. Duplicate booking (must be rejected)"
-RESP=$(request POST "/events/${EVENT_ID}/book" "" "$USER_TOKEN")
-pretty "$RESP"
-if is_failure "$RESP"; then
-  ERROR=$(extract "$RESP" "['error']")
-  ok "Duplicate correctly rejected: \"$ERROR\""
-else
-  fail "Duplicate should have been rejected" "$RESP"
-fi
+# ── 18. Promote user via admin endpoint ─────────────────────
+log "18. promote user $USER_ID to admin"
+RESP=$(call POST "/admin/users/${USER_ID}/promote" "$ADMIN_TOKEN")
+[[ "$(j "$RESP" '.data.role')" == "admin" ]] && ok "promoted" || fail "promote" "$RESP"
 
-# ── 11. My bookings ───────────────────────────────────────────────────────────
-log "11. Fetch my bookings"
-RESP=$(request GET /me/bookings "" "$USER_TOKEN")
-pretty "$RESP"
-if is_success "$RESP"; then
-  ok "My bookings fetched"
-else
-  fail "My bookings" "$RESP"
-fi
-
-# ── 12. Run lottery draw ──────────────────────────────────────────────────────
-log "12. Run lottery draw (admin only)"
-RESP=$(request POST "/events/${EVENT_ID}/draw" "" "$ADMIN_TOKEN")
-pretty "$RESP"
-if is_success "$RESP"; then
-  WINNERS=$(extract "$RESP" "['data']['winners']")
-  ENTROPY=$(extract "$RESP" "['data']['winners'][0]['entropy_source']")
-  TOTAL=$(extract "$RESP" "['data']['total_entrants']")
-  ok "Draw completed — $TOTAL entrant(s), entropy: $ENTROPY"
-else
-  fail "Lottery draw" "$RESP"
-fi
-
-# ── 13. Fetch results ─────────────────────────────────────────────────────────
-log "13. Fetch draw results (public endpoint)"
-RESP=$(request GET "/events/${EVENT_ID}/results")
-pretty "$RESP"
-if is_success "$RESP"; then
-  WINNER_ID=$(extract "$RESP" "['data']['winners'][0]['winner_user_id']")
-  ok "Results verified — winner user_id: $WINNER_ID"
-else
-  fail "Fetch results" "$RESP"
-fi
-
-# ── 14. Try drawing again (must fail — idempotency) ───────────────────────────
-log "14. Re-run draw on same event (must be rejected)"
-RESP=$(request POST "/events/${EVENT_ID}/draw" "" "$ADMIN_TOKEN")
-pretty "$RESP"
-if is_failure "$RESP"; then
-  ok "Re-draw correctly rejected (idempotency works)"
-else
-  fail "Re-draw should have been rejected" "$RESP"
-fi
-
-# ── Summary ───────────────────────────────────────────────────────────────────
-echo ""
+# ── Summary ─────────────────────────────────────────────────
+echo
 echo "=================================================="
-if [ "$FAIL" -eq 0 ]; then
-  echo -e "  ${GREEN}ALL $PASS TESTS PASSED ✓${NC}"
+if [[ "$FAIL" -eq 0 ]]; then
+  echo -e "  ${GREEN}ALL $PASS TESTS PASSED${NC}"
 else
   echo -e "  ${GREEN}$PASS passed${NC} | ${RED}$FAIL failed${NC}"
+  exit 1
 fi
 echo "=================================================="
-echo ""

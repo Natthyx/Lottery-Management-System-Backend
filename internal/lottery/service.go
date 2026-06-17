@@ -2,18 +2,39 @@ package lottery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/natannan/lottery-system/internal/models"
 	"github.com/rs/zerolog/log"
+
+	"github.com/Natthyx/lottery-system/internal/models"
 )
 
-// Service orchestrates the lottery draw.
-// It ties together: fetching participants, running the algorithm,
-// persisting results to the audit log, and updating the event status —
-// all inside a single database transaction.
+// Domain errors.
+var (
+	ErrEventNotFound      = errors.New("event not found")
+	ErrEventNotClosed     = errors.New("event must be closed before drawing")
+	ErrEventAlreadyDrawn  = errors.New("event has already been drawn")
+	ErrEventCancelled     = errors.New("event has been cancelled")
+	ErrNoParticipants     = errors.New("no participants in the lottery pool")
+	ErrResultsUnavailable = errors.New("no draw results available for this event")
+)
+
+const entropySource = "crypto/rand+fisher-yates"
+
+// Service orchestrates the lottery draw end-to-end:
+//  1. Lock the event row (SELECT ... FOR UPDATE) inside a transaction.
+//  2. Require status='closed' so no new bookings can arrive.
+//  3. Fetch the participant pool inside the same transaction.
+//  4. Run a cryptographically fair Fisher–Yates selection.
+//  5. Insert audit-log rows and flip status='drawn'.
+//  6. Commit.
+//
+// Steps 1-6 happen in one transaction. Either everyone sees a fair draw
+// committed to the audit log, or nothing happens.
 type Service struct {
 	db *pgxpool.Pool
 }
@@ -22,170 +43,156 @@ func NewService(db *pgxpool.Pool) *Service {
 	return &Service{db: db}
 }
 
-// RunDraw is the main draw orchestration function.
-//
-// Execution order (all atomic — DB transaction wraps steps 2-5):
-//  1. Validate the event is in 'open' or 'closed' state
-//  2. Fetch all eligible participant user IDs
-//  3. Run the cryptographic Fisher-Yates selection
-//  4. Write every draw result to the lottery_draws audit log
-//  5. Mark the event as 'drawn'
-//
-// Atomicity is critical here: if we write winners but crash before
-// marking the event 'drawn', the draw could be run twice. The
-// transaction ensures all-or-nothing.
+// RunDraw executes the lottery for a closed event and returns the result.
 func (s *Service) RunDraw(ctx context.Context, eventID int64) (*models.DrawResult, error) {
-	// ── Step 1: Load event (outside the transaction — read-only) ─────────────
-	var title string
-	var status string
-	var winnerCount int
-
-	err := s.db.QueryRow(ctx,
-		`SELECT title, status, winner_count FROM events WHERE id = $1`,
-		eventID,
-	).Scan(&title, &status, &winnerCount)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("event %d not found", eventID)
+		return nil, fmt.Errorf("begin draw tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// 1. Lock the event row.
+	var title, status string
+	var winnerCount int
+	err = tx.QueryRow(ctx, `
+		SELECT title, status, winner_count
+		FROM events
+		WHERE id = $1
+		FOR UPDATE
+	`, eventID).Scan(&title, &status, &winnerCount)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEventNotFound
+		}
+		return nil, fmt.Errorf("locking event: %w", err)
 	}
 
-	if status == "drawn" {
-		return nil, fmt.Errorf("lottery for event %d has already been drawn", eventID)
-	}
-	if status == "cancelled" {
-		return nil, fmt.Errorf("event %d is cancelled", eventID)
+	// 2. Enforce status machine.
+	switch status {
+	case string(models.EventStatusClosed):
+		// ok
+	case string(models.EventStatusDrawn):
+		return nil, ErrEventAlreadyDrawn
+	case string(models.EventStatusCancelled):
+		return nil, ErrEventCancelled
+	default: // open
+		return nil, fmt.Errorf("%w (current status: %s)", ErrEventNotClosed, status)
 	}
 
-	// ── Step 2: Fetch participants ────────────────────────────────────────────
-	rows, err := s.db.Query(ctx,
-		`SELECT user_id FROM bookings WHERE event_id = $1 ORDER BY booked_at ASC`,
-		eventID,
-	)
+	// 3. Fetch participants under the same lock.
+	rows, err := tx.Query(ctx, `
+		SELECT user_id FROM bookings
+		WHERE event_id = $1
+		ORDER BY booked_at ASC
+	`, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("fetching participants: %w", err)
 	}
-	defer rows.Close()
-
-	var participants []int64
+	participants := make([]int64, 0, 64)
 	for rows.Next() {
 		var uid int64
 		if err := rows.Scan(&uid); err != nil {
-			return nil, err
+			rows.Close()
+			return nil, fmt.Errorf("scanning participant: %w", err)
 		}
 		participants = append(participants, uid)
 	}
-
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating participants: %w", err)
+	}
 	if len(participants) == 0 {
-		return nil, fmt.Errorf("no participants found for event %d", eventID)
+		return nil, ErrNoParticipants
+	}
+
+	// 4. Cryptographic Fisher-Yates selection.
+	winners, waitlist, err := SelectWinners(participants, winnerCount)
+	if err != nil {
+		return nil, fmt.Errorf("lottery selection: %w", err)
 	}
 
 	log.Info().
 		Int64("event_id", eventID).
 		Int("participant_count", len(participants)).
+		Int("winner_count", len(winners)).
 		Msg("running lottery draw")
 
-	// ── Step 3: Run the cryptographic selection ───────────────────────────────
-	winners, waitlist, err := SelectWinners(participants, winnerCount)
-	if err != nil {
-		return nil, fmt.Errorf("lottery selection failed: %w", err)
-	}
-
-	// ── Steps 4 & 5: Persist results atomically ───────────────────────────────
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("beginning draw transaction: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
-
-	drawnAt := time.Now()
+	// 5. Persist audit log + flip status.
+	drawnAt := time.Now().UTC()
 	totalEntrants := len(participants)
-	var drawRecords []models.LotteryDraw
+	winnerRecords := make([]models.LotteryDraw, 0, len(winners))
+	waitlistRecords := make([]models.LotteryDraw, 0, len(waitlist))
 
-	// Insert winners (rank 1..winnerCount)
-	for rank, userID := range winners {
-		drawRank := rank + 1
-		var drawID int64
+	insert := func(userID int64, rank int) (models.LotteryDraw, error) {
+		var d models.LotteryDraw
 		err := tx.QueryRow(ctx, `
-			INSERT INTO lottery_draws (event_id, winner_user_id, draw_rank, total_entrants, drawn_at)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id
-		`, eventID, userID, drawRank, totalEntrants, drawnAt).Scan(&drawID)
-		if err != nil {
-			return nil, fmt.Errorf("inserting winner rank %d: %w", drawRank, err)
-		}
-		drawRecords = append(drawRecords, models.LotteryDraw{
-			ID:            drawID,
-			EventID:       eventID,
-			WinnerUserID:  userID,
-			DrawRank:      drawRank,
-			EntropySource: "crypto/rand+Fisher-Yates",
-			TotalEntrants: totalEntrants,
-			DrawnAt:       drawnAt,
-		})
+			INSERT INTO lottery_draws (event_id, winner_user_id, draw_rank, total_entrants, entropy_source, drawn_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, event_id, winner_user_id, draw_rank, entropy_source, total_entrants, drawn_at
+		`, eventID, userID, rank, totalEntrants, entropySource, drawnAt).Scan(
+			&d.ID, &d.EventID, &d.WinnerUserID, &d.DrawRank,
+			&d.EntropySource, &d.TotalEntrants, &d.DrawnAt,
+		)
+		return d, err
 	}
 
-	// Insert waitlist (rank winnerCount+1..n)
-	var waitlistRecords []models.LotteryDraw
-	for i, userID := range waitlist {
-		drawRank := winnerCount + i + 1
-		var drawID int64
-		err := tx.QueryRow(ctx, `
-			INSERT INTO lottery_draws (event_id, winner_user_id, draw_rank, total_entrants, drawn_at)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id
-		`, eventID, userID, drawRank, totalEntrants, drawnAt).Scan(&drawID)
+	for i, uid := range winners {
+		d, err := insert(uid, i+1)
 		if err != nil {
-			return nil, fmt.Errorf("inserting waitlist rank %d: %w", drawRank, err)
+			return nil, fmt.Errorf("inserting winner rank %d: %w", i+1, err)
 		}
-		waitlistRecords = append(waitlistRecords, models.LotteryDraw{
-			ID:            drawID,
-			EventID:       eventID,
-			WinnerUserID:  userID,
-			DrawRank:      drawRank,
-			EntropySource: "crypto/rand+Fisher-Yates",
-			TotalEntrants: totalEntrants,
-			DrawnAt:       drawnAt,
-		})
+		winnerRecords = append(winnerRecords, d)
+	}
+	for i, uid := range waitlist {
+		rank := len(winners) + i + 1
+		d, err := insert(uid, rank)
+		if err != nil {
+			return nil, fmt.Errorf("inserting waitlist rank %d: %w", rank, err)
+		}
+		waitlistRecords = append(waitlistRecords, d)
 	}
 
-	// Mark event as drawn
-	_, err = tx.Exec(ctx,
-		`UPDATE events SET status = 'drawn' WHERE id = $1`,
-		eventID,
-	)
-	if err != nil {
+	if _, err := tx.Exec(ctx,
+		`UPDATE events SET status = 'drawn' WHERE id = $1`, eventID,
+	); err != nil {
 		return nil, fmt.Errorf("marking event as drawn: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("committing draw transaction: %w", err)
+		return nil, fmt.Errorf("commit draw tx: %w", err)
 	}
 
 	log.Info().
 		Int64("event_id", eventID).
-		Int("winners", len(winners)).
-		Int("waitlist", len(waitlist)).
-		Msg("lottery draw completed successfully")
+		Int("winners", len(winnerRecords)).
+		Int("waitlist", len(waitlistRecords)).
+		Msg("lottery draw completed")
 
 	return &models.DrawResult{
 		EventID:       eventID,
 		EventTitle:    title,
 		TotalEntrants: totalEntrants,
-		Winners:       drawRecords,
+		Winners:       winnerRecords,
 		Waitlist:      waitlistRecords,
 		DrawnAt:       drawnAt,
 	}, nil
 }
 
-// GetResults fetches the stored draw results for an event from the audit log.
+// GetResults loads the committed draw from the audit log and splits it
+// into winners and waitlist by comparing draw_rank to the event's
+// winner_count snapshot.
 func (s *Service) GetResults(ctx context.Context, eventID int64) (*models.DrawResult, error) {
-	// Verify event exists
 	var title string
-	err := s.db.QueryRow(ctx,
-		`SELECT title FROM events WHERE id = $1 AND status = 'drawn'`,
-		eventID,
-	).Scan(&title)
+	var winnerCount int
+	err := s.db.QueryRow(ctx, `
+		SELECT title, winner_count FROM events
+		WHERE id = $1 AND status = 'drawn'
+	`, eventID).Scan(&title, &winnerCount)
 	if err != nil {
-		return nil, fmt.Errorf("no draw results found for event %d", eventID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrResultsUnavailable
+		}
+		return nil, fmt.Errorf("fetching event: %w", err)
 	}
 
 	rows, err := s.db.Query(ctx, `
@@ -199,23 +206,32 @@ func (s *Service) GetResults(ctx context.Context, eventID int64) (*models.DrawRe
 	}
 	defer rows.Close()
 
-	result := &models.DrawResult{EventID: eventID, EventTitle: title}
+	result := &models.DrawResult{
+		EventID:    eventID,
+		EventTitle: title,
+		Winners:    []models.LotteryDraw{},
+		Waitlist:   []models.LotteryDraw{},
+	}
 	for rows.Next() {
 		var d models.LotteryDraw
 		if err := rows.Scan(
 			&d.ID, &d.EventID, &d.WinnerUserID, &d.DrawRank,
 			&d.EntropySource, &d.TotalEntrants, &d.DrawnAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scanning draw row: %w", err)
 		}
 		if result.DrawnAt.IsZero() {
 			result.DrawnAt = d.DrawnAt
 			result.TotalEntrants = d.TotalEntrants
 		}
-		// Separate winners from waitlist by checking if the event's winner_count
-		// is known — we use draw_rank to distinguish
-		result.Winners = append(result.Winners, d)
+		if d.DrawRank <= winnerCount {
+			result.Winners = append(result.Winners, d)
+		} else {
+			result.Waitlist = append(result.Waitlist, d)
+		}
 	}
-
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating draw rows: %w", err)
+	}
 	return result, nil
 }

@@ -1,11 +1,15 @@
 package auth
 
 import (
-	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/natannan/lottery-system/internal/models"
+
+	"github.com/Natthyx/lottery-system/internal/httpx"
+	"github.com/Natthyx/lottery-system/internal/middleware"
+	"github.com/Natthyx/lottery-system/internal/models"
 )
 
 // Handler wires auth routes to the Service.
@@ -17,58 +21,87 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) Routes() func(chi.Router) {
-	return func(r chi.Router) {
-		r.Post("/register", h.Register)
-		r.Post("/login", h.Login)
-	}
-}
-
 // Register godoc
 // POST /auth/register
-// Body: { "email": "...", "password": "...", "full_name": "..." }
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respond(w, http.StatusBadRequest, false, nil, "invalid request body")
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.BadRequest(w, "invalid request body: "+err.Error())
 		return
 	}
 
 	user, err := h.service.Register(r.Context(), req)
 	if err != nil {
-		respond(w, http.StatusBadRequest, false, nil, err.Error())
+		switch {
+		case errors.Is(err, ErrEmailTaken):
+			httpx.Conflict(w, err.Error())
+		case errors.Is(err, ErrInvalidInput):
+			httpx.BadRequest(w, err.Error())
+		default:
+			httpx.Internal(w, "could not register user")
+		}
 		return
 	}
-
-	respond(w, http.StatusCreated, true, user, "")
+	httpx.Respond(w, http.StatusCreated, true, user, "")
 }
 
 // Login godoc
 // POST /auth/login
-// Body: { "email": "...", "password": "..." }
-// Returns: { "token": "...", "user": { ... } }
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respond(w, http.StatusBadRequest, false, nil, "invalid request body")
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.BadRequest(w, "invalid request body: "+err.Error())
 		return
 	}
 
 	resp, err := h.service.Login(r.Context(), req)
 	if err != nil {
-		respond(w, http.StatusUnauthorized, false, nil, err.Error())
+		if errors.Is(err, ErrInvalidCredentials) {
+			httpx.Unauthorized(w, err.Error())
+			return
+		}
+		httpx.Internal(w, "could not authenticate")
 		return
 	}
-
-	respond(w, http.StatusOK, true, resp, "")
+	httpx.Respond(w, http.StatusOK, true, resp, "")
 }
 
-func respond(w http.ResponseWriter, status int, success bool, data interface{}, errMsg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(models.APIResponse{ //nolint:errcheck
-		Success: success,
-		Data:    data,
-		Error:   errMsg,
-	})
+// Me godoc
+// GET /auth/me  (authenticated)
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		httpx.Unauthorized(w, "unauthenticated")
+		return
+	}
+	user, err := h.service.Me(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			httpx.NotFound(w, "user not found")
+			return
+		}
+		httpx.Internal(w, "could not fetch user")
+		return
+	}
+	httpx.Respond(w, http.StatusOK, true, user, "")
+}
+
+// PromoteToAdmin godoc
+// POST /admin/users/{id}/promote  (admin only)
+func (h *Handler) PromoteToAdmin(w http.ResponseWriter, r *http.Request) {
+	userID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		httpx.BadRequest(w, "invalid user id")
+		return
+	}
+	user, err := h.service.PromoteToAdmin(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			httpx.NotFound(w, "user not found")
+			return
+		}
+		httpx.Internal(w, "could not promote user")
+		return
+	}
+	httpx.Respond(w, http.StatusOK, true, user, "")
 }

@@ -2,83 +2,112 @@ package booking
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
+
+	"github.com/Natthyx/lottery-system/internal/models"
+	"github.com/Natthyx/lottery-system/internal/pgerr"
 )
 
-// Service handles all booking logic.
-// The critical path here is BookWithLock — the distributed concurrency control.
+// Domain errors.
+var (
+	ErrEventBusy     = errors.New("event is busy, please retry")
+	ErrEventNotFound = errors.New("event not found")
+	ErrEventNotOpen  = errors.New("event is not open for booking")
+	ErrEventFull     = errors.New("event is fully booked")
+	ErrAlreadyBooked = errors.New("you have already booked this event")
+	ErrInvalidInput  = errors.New("invalid input")
+)
+
+// luaReleaseLock atomically deletes the lock key only if its value matches
+// the supplied token. This prevents a request whose TTL expired from
+// accidentally releasing another holder's lock.
+//
+// KEYS[1] = lock key, ARGV[1] = our token
+const luaReleaseLock = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+else
+	return 0
+end`
+
+// Service handles all booking logic. The critical path is BookWithLock —
+// the distributed concurrency control around event capacity.
 type Service struct {
-	db      *pgxpool.Pool
-	redis   *redis.Client
-	lockTTL time.Duration
+	db        *pgxpool.Pool
+	redis     *redis.Client
+	lockTTL   time.Duration
+	releaseSh *redis.Script
 }
 
-func NewService(db *pgxpool.Pool, redis *redis.Client, lockTTL time.Duration) *Service {
-	return &Service{db: db, redis: redis, lockTTL: lockTTL}
+func NewService(db *pgxpool.Pool, rdb *redis.Client, lockTTL time.Duration) *Service {
+	if lockTTL <= 0 {
+		lockTTL = 5 * time.Second
+	}
+	return &Service{
+		db:        db,
+		redis:     rdb,
+		lockTTL:   lockTTL,
+		releaseSh: redis.NewScript(luaReleaseLock),
+	}
 }
 
-// BookWithLock is the core method. It:
-//  1. Acquires a Redis distributed lock on the event
-//  2. Checks event is open and has capacity
-//  3. Inserts the booking inside that lock
-//  4. Releases the lock
-//
-// WHY Redis lock here:
-//   Without this, 1000 concurrent users can all read "1 slot remaining"
-//   and all write a booking — overselling the event. Redis SETNX is atomic:
-//   only one goroutine across ALL app replicas can hold the lock at a time.
-//
-// WHY TTL on the lock:
-//   If the process crashes mid-execution, the lock expires automatically
-//   after lockTTL instead of hanging forever.
+// BookWithLock acquires a Redis distributed lock on the event then runs
+// the booking inside a database transaction. The lock is owner-safe:
+// release is a Lua "compare-and-delete" against a per-request token, so
+// a request whose TTL expired cannot release another request's lock.
 func (s *Service) BookWithLock(ctx context.Context, eventID, userID int64) error {
-	lockKey := fmt.Sprintf("lock:booking:event:%d", eventID)
-	lockValue := fmt.Sprintf("%d", userID) // helps with debugging — who holds the lock
+	if eventID <= 0 || userID <= 0 {
+		return ErrInvalidInput
+	}
 
-	// ── Step 1: Acquire distributed lock ─────────────────────────────────────
-	// SetNX = SET if Not eXists. Atomic in Redis.
-	acquired, err := s.redis.SetNX(ctx, lockKey, lockValue, s.lockTTL).Result()
+	lockKey := fmt.Sprintf("lock:booking:event:%d", eventID)
+	token, err := newToken()
+	if err != nil {
+		return fmt.Errorf("generating lock token: %w", err)
+	}
+
+	acquired, err := s.redis.SetNX(ctx, lockKey, token, s.lockTTL).Result()
 	if err != nil {
 		return fmt.Errorf("redis lock acquisition failed: %w", err)
 	}
 	if !acquired {
-		// Another request is currently booking this event. Tell the client to retry.
-		return fmt.Errorf("event is busy, please try again in a moment")
+		return ErrEventBusy
 	}
 
-	// ── Step 2: Always release the lock when done ─────────────────────────────
-	// defer runs even if we return early due to an error below.
 	defer func() {
-		if err := s.redis.Del(ctx, lockKey).Err(); err != nil {
-			log.Error().Err(err).Str("key", lockKey).Msg("failed to release Redis lock")
+		// Owner-safe release: only deletes if we still own it.
+		// Use a fresh background context with a short timeout so that
+		// release still happens even if the caller's context was
+		// cancelled (e.g. client disconnected).
+		relCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if _, err := s.releaseSh.Run(relCtx, s.redis, []string{lockKey}, token).Result(); err != nil && !errors.Is(err, redis.Nil) {
+			log.Warn().Err(err).Str("key", lockKey).Msg("failed to release Redis lock")
 		}
 	}()
 
-	// ── Step 3: Safe zone — only one goroutine reaches here per event ─────────
 	return s.createBooking(ctx, eventID, userID)
 }
 
-// createBooking runs inside the Redis lock. It validates capacity and writes
-// the booking in a single database transaction.
+// createBooking runs inside the Redis lock. Capacity and status are
+// re-checked under a SELECT ... FOR UPDATE so that concurrent bookings
+// across replicas (or a Redis-lock bypass) cannot oversell the event.
 func (s *Service) createBooking(ctx context.Context, eventID, userID int64) error {
-	// Use a DB transaction so that the capacity check and the insert are atomic.
-	// Without the transaction, two goroutines could both pass the capacity check
-	// before either writes — the Redis lock prevents this at the application level,
-	// but the DB transaction is a second line of defence.
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck — rollback is a no-op after commit
+	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// Fetch and lock the event row FOR UPDATE.
-	// This prevents a concurrent DB-level race even if the Redis lock is somehow
-	// bypassed (e.g. Redis failover). Defence in depth.
 	var status string
 	var capacity int
 	err = tx.QueryRow(ctx,
@@ -86,34 +115,36 @@ func (s *Service) createBooking(ctx context.Context, eventID, userID int64) erro
 		eventID,
 	).Scan(&status, &capacity)
 	if err != nil {
-		return fmt.Errorf("event not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrEventNotFound
+		}
+		return fmt.Errorf("fetching event: %w", err)
 	}
 
-	if status != "open" {
-		return fmt.Errorf("event is not open for booking (status: %s)", status)
+	if status != string(models.EventStatusOpen) {
+		return fmt.Errorf("%w (current status: %s)", ErrEventNotOpen, status)
 	}
 
-	// Count existing bookings
 	var booked int
-	tx.QueryRow(ctx, //nolint:errcheck
+	if err := tx.QueryRow(ctx,
 		`SELECT COUNT(*) FROM bookings WHERE event_id = $1`, eventID,
-	).Scan(&booked)
-
+	).Scan(&booked); err != nil {
+		return fmt.Errorf("counting bookings: %w", err)
+	}
 	if booked >= capacity {
-		return fmt.Errorf("event is fully booked (%d/%d)", booked, capacity)
+		return fmt.Errorf("%w (%d/%d)", ErrEventFull, booked, capacity)
 	}
 
-	// Insert the booking.
-	// The UNIQUE(event_id, user_id) constraint in the DB is our final safety net
-	// against duplicate bookings — it will return an error if the user already booked.
 	_, err = tx.Exec(ctx,
 		`INSERT INTO bookings (event_id, user_id) VALUES ($1, $2)`,
 		eventID, userID,
 	)
 	if err != nil {
-		// Check for the unique violation — give a clear message
-		if isUniqueViolation(err) {
-			return fmt.Errorf("you have already booked this event")
+		if pgerr.IsUnique(err) {
+			return ErrAlreadyBooked
+		}
+		if pgerr.IsForeignKey(err) {
+			return ErrEventNotFound
 		}
 		return fmt.Errorf("inserting booking: %w", err)
 	}
@@ -121,66 +152,64 @@ func (s *Service) createBooking(ctx context.Context, eventID, userID int64) erro
 	return tx.Commit(ctx)
 }
 
-// GetByEvent returns all bookings for a given event (admin use).
-func (s *Service) GetByEvent(ctx context.Context, eventID int64) ([]int64, error) {
-	rows, err := s.db.Query(ctx,
-		`SELECT user_id FROM bookings WHERE event_id = $1 ORDER BY booked_at ASC`,
-		eventID,
-	)
+// GetByEvent returns all bookings for an event (admin use).
+func (s *Service) GetByEvent(ctx context.Context, eventID int64) ([]models.Booking, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id, event_id, user_id, booked_at
+		FROM bookings
+		WHERE event_id = $1
+		ORDER BY booked_at ASC
+	`, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("querying bookings: %w", err)
 	}
 	defer rows.Close()
 
-	var userIDs []int64
+	bookings := []models.Booking{}
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var b models.Booking
+		if err := rows.Scan(&b.ID, &b.EventID, &b.UserID, &b.BookedAt); err != nil {
 			return nil, err
 		}
-		userIDs = append(userIDs, id)
+		bookings = append(bookings, b)
 	}
-	return userIDs, nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return bookings, nil
 }
 
-// UserBookings returns all event IDs a user has booked.
-func (s *Service) UserBookings(ctx context.Context, userID int64) ([]int64, error) {
-	rows, err := s.db.Query(ctx,
-		`SELECT event_id FROM bookings WHERE user_id = $1 ORDER BY booked_at DESC`,
-		userID,
-	)
+// UserBookings returns all bookings made by a user.
+func (s *Service) UserBookings(ctx context.Context, userID int64) ([]models.Booking, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id, event_id, user_id, booked_at
+		FROM bookings
+		WHERE user_id = $1
+		ORDER BY booked_at DESC
+	`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("querying user bookings: %w", err)
 	}
 	defer rows.Close()
 
-	var eventIDs []int64
+	bookings := []models.Booking{}
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var b models.Booking
+		if err := rows.Scan(&b.ID, &b.EventID, &b.UserID, &b.BookedAt); err != nil {
 			return nil, err
 		}
-		eventIDs = append(eventIDs, id)
+		bookings = append(bookings, b)
 	}
-	return eventIDs, nil
-}
-
-// isUniqueViolation checks if a pgx error is a PostgreSQL unique constraint violation.
-// PG error code 23505 = unique_violation.
-func isUniqueViolation(err error) bool {
-	return err != nil && len(err.Error()) > 0 &&
-		(contains(err.Error(), "23505") || contains(err.Error(), "unique"))
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-	return false
+	return bookings, nil
+}
+
+func newToken() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }

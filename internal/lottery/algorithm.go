@@ -14,24 +14,28 @@ import (
 // FairShuffle performs a cryptographically secure Fisher-Yates (Knuth) shuffle.
 //
 // WHY NOT math/rand:
-//   math/rand is a PRNG seeded by a deterministic value. If an attacker can
-//   guess or observe the seed, they predict the entire sequence — and therefore
-//   predict the lottery winner. Unacceptable for any high-stakes system.
+//
+//	math/rand is a PRNG seeded by a deterministic value. If an attacker can
+//	guess or observe the seed, they predict the entire sequence — and therefore
+//	predict the lottery winner. Unacceptable for any high-stakes system.
 //
 // WHY crypto/rand:
-//   crypto/rand reads from /dev/urandom on Linux — kernel-level entropy derived
-//   from hardware events (CPU jitter, interrupt timing). It is the same source
-//   used for TLS key generation and is computationally infeasible to predict.
+//
+//	crypto/rand reads from /dev/urandom on Linux — kernel-level entropy derived
+//	from hardware events (CPU jitter, interrupt timing). It is the same source
+//	used for TLS key generation and is computationally infeasible to predict.
 //
 // WHY Fisher-Yates:
-//   It guarantees every permutation of the input is equally likely (uniform
-//   distribution). Naive approaches like "sort by random score" have subtle
-//   statistical biases.
+//
+//	It guarantees every permutation of the input is equally likely (uniform
+//	distribution). Naive approaches like "sort by random score" have subtle
+//	statistical biases.
 //
 // Algorithm walkthrough for [A, B, C, D]:
-//   i=3: swap D with rand[0..3] -> say 1 -> [A, D, C, B]
-//   i=2: swap C with rand[0..2] -> say 0 -> [C, D, A, B]
-//   i=1: swap D with rand[0..1] -> say 1 -> [C, D, A, B]
+//
+//	i=3: swap D with rand[0..3] -> say 1 -> [A, D, C, B]
+//	i=2: swap C with rand[0..2] -> say 0 -> [C, D, A, B]
+//	i=1: swap D with rand[0..1] -> say 1 -> [C, D, A, B]
 //
 // Time:  O(n)
 // Space: O(n) — copies input to avoid mutating caller's slice

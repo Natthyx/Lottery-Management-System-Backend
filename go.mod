@@ -1,4 +1,4 @@
-module github.com/natannan/lottery-system
+module github.com/Natthyx/lottery-system
 
 go 1.22
 

@@ -1,27 +1,39 @@
-# Stage 1: Build — produces a static binary
+# syntax=docker/dockerfile:1.7
+
+# ── Stage 1: Build ───────────────────────────────────────────
 FROM golang:1.22-alpine AS builder
 
-RUN apk add --no-cache git
-WORKDIR /app
+RUN apk add --no-cache git ca-certificates
 
-# Cache dependency downloads separately from source changes
+WORKDIR /src
+
+# Cache dependency downloads separately from source.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 COPY . .
 
-# CGO_ENABLED=0 = fully static binary (no libc)
-# -ldflags="-w -s" = strip debug symbols (smaller binary)
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-w -s" \
-    -o /app/server \
-    ./cmd/server
+# CGO_ENABLED=0 → fully static binary
+# -trimpath          → strip workspace paths from binary
+# -ldflags -w -s     → drop DWARF + symbol tables for smaller binary
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux \
+    go build \
+      -trimpath \
+      -ldflags="-w -s -X main.version=${VERSION}" \
+      -o /out/server \
+      ./cmd/server
 
-# Stage 2: Runtime — distroless = no shell, minimal attack surface
-FROM gcr.io/distroless/static-debian12
+# ── Stage 2: Runtime ─────────────────────────────────────────
+# distroless = no shell, minimal attack surface, non-root user
+FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY --from=builder /app/server /server
+COPY --from=builder /out/server /server
 
-USER 65534
+USER nonroot:nonroot
 EXPOSE 8080
+
 ENTRYPOINT ["/server"]

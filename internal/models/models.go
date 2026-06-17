@@ -42,10 +42,10 @@ type Event struct {
 // ── Booking ──────────────────────────────────────────────────────────────────
 
 type Booking struct {
-	ID        int64     `json:"id"`
-	EventID   int64     `json:"event_id"`
-	UserID    int64     `json:"user_id"`
-	BookedAt  time.Time `json:"booked_at"`
+	ID       int64     `json:"id"`
+	EventID  int64     `json:"event_id"`
+	UserID   int64     `json:"user_id"`
+	BookedAt time.Time `json:"booked_at"`
 }
 
 // ── Lottery Draw (audit log entry) ───────────────────────────────────────────
@@ -54,7 +54,7 @@ type LotteryDraw struct {
 	ID            int64     `json:"id"`
 	EventID       int64     `json:"event_id"`
 	WinnerUserID  int64     `json:"winner_user_id"`
-	DrawRank      int       `json:"draw_rank"`       // 1 = winner, 2+ = waitlist
+	DrawRank      int       `json:"draw_rank"` // 1 = winner, 2+ = waitlist
 	EntropySource string    `json:"entropy_source"`
 	TotalEntrants int       `json:"total_entrants"`
 	DrawnAt       time.Time `json:"drawn_at"`
@@ -115,7 +115,7 @@ type APIResponse struct {
 
 // Meta carries pagination info for list endpoints.
 type Meta struct {
-	Total  int `json:"total"`
-	Page   int `json:"page"`
-	Limit  int `json:"limit"`
+	Total int `json:"total"`
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
 }

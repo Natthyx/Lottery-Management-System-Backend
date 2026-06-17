@@ -1,13 +1,15 @@
 package event
 
 import (
-	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/natannan/lottery-system/internal/middleware"
-	"github.com/natannan/lottery-system/internal/models"
+
+	"github.com/Natthyx/lottery-system/internal/httpx"
+	"github.com/Natthyx/lottery-system/internal/middleware"
+	"github.com/Natthyx/lottery-system/internal/models"
 )
 
 // Handler wires HTTP routes to the event Service.
@@ -19,63 +21,49 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-// Routes registers all event routes onto a chi router.
-// Called from main.go during server setup.
-func (h *Handler) Routes() func(chi.Router) {
-	return func(r chi.Router) {
-		r.Get("/", h.List)
-		r.Get("/{id}", h.GetByID)
-
-		// Admin-only routes
-		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireAdmin)
-			r.Post("/", h.Create)
-		})
-	}
-}
-
 // Create godoc
-// POST /events
-// Body: CreateEventRequest JSON
-// Auth: admin JWT required
+// POST /events  (admin)
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req models.CreateEventRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respond(w, http.StatusBadRequest, false, nil, "invalid request body")
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.BadRequest(w, "invalid request body: "+err.Error())
 		return
 	}
-
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {
-		respond(w, http.StatusUnauthorized, false, nil, "unauthenticated")
+		httpx.Unauthorized(w, "unauthenticated")
 		return
 	}
-
 	event, err := h.service.Create(r.Context(), req, userID)
 	if err != nil {
-		respond(w, http.StatusBadRequest, false, nil, err.Error())
+		if errors.Is(err, ErrInvalidInput) {
+			httpx.BadRequest(w, err.Error())
+			return
+		}
+		httpx.Internal(w, "could not create event")
 		return
 	}
-
-	respond(w, http.StatusCreated, true, event, "")
+	httpx.Respond(w, http.StatusCreated, true, event, "")
 }
 
 // GetByID godoc
 // GET /events/{id}
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	id, err := parseID(r, "id")
 	if err != nil {
-		respond(w, http.StatusBadRequest, false, nil, "invalid event id")
+		httpx.BadRequest(w, err.Error())
 		return
 	}
-
 	event, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		respond(w, http.StatusNotFound, false, nil, err.Error())
+		if errors.Is(err, ErrEventNotFound) {
+			httpx.NotFound(w, "event not found")
+			return
+		}
+		httpx.Internal(w, "could not fetch event")
 		return
 	}
-
-	respond(w, http.StatusOK, true, event, "")
+	httpx.Respond(w, http.StatusOK, true, event, "")
 }
 
 // List godoc
@@ -87,31 +75,70 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	events, total, err := h.service.List(r.Context(), status, page, limit)
 	if err != nil {
-		respond(w, http.StatusInternalServerError, false, nil, "failed to list events")
+		httpx.Internal(w, "failed to list events")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.APIResponse{ //nolint:errcheck
-		Success: true,
-		Data:    events,
-		Meta: &models.Meta{
-			Total: total,
-			Page:  page,
-			Limit: limit,
-		},
-	})
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	httpx.RespondMeta(w, http.StatusOK, events, &models.Meta{Total: total, Page: page, Limit: limit})
 }
 
-// ── shared helper ─────────────────────────────────────────────────────────────
-
-func respond(w http.ResponseWriter, status int, success bool, data interface{}, errMsg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(models.APIResponse{ //nolint:errcheck
-		Success: success,
-		Data:    data,
-		Error:   errMsg,
-	})
+// Close godoc
+// PUT /events/{id}/close  (admin)
+func (h *Handler) Close(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		httpx.BadRequest(w, err.Error())
+		return
+	}
+	event, err := h.service.Close(r.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrEventNotFound):
+			httpx.NotFound(w, "event not found")
+		case errors.Is(err, ErrInvalidTransition):
+			httpx.Conflict(w, err.Error())
+		default:
+			httpx.Internal(w, "could not close event")
+		}
+		return
+	}
+	httpx.Respond(w, http.StatusOK, true, event, "")
 }
+
+// Cancel godoc
+// PUT /events/{id}/cancel  (admin)
+func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r, "id")
+	if err != nil {
+		httpx.BadRequest(w, err.Error())
+		return
+	}
+	event, err := h.service.Cancel(r.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrEventNotFound):
+			httpx.NotFound(w, "event not found")
+		case errors.Is(err, ErrInvalidTransition):
+			httpx.Conflict(w, err.Error())
+		default:
+			httpx.Internal(w, "could not cancel event")
+		}
+		return
+	}
+	httpx.Respond(w, http.StatusOK, true, event, "")
+}
+
+func parseID(r *http.Request, key string) (int64, error) {
+	id, err := strconv.ParseInt(chi.URLParam(r, key), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errInvalidID
+	}
+	return id, nil
+}
+
+var errInvalidID = errors.New("invalid id")

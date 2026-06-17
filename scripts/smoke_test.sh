@@ -1,136 +1,141 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ============================================================
-# Full end-to-end API smoke test
-# Run: chmod +x scripts/smoke_test.sh && ./scripts/smoke_test.sh
-#
-# Prerequisites: server running on localhost:8080
-# Start with:  make run
+# Lottery System — smoke test
+# Prereqs:
+#   - server running on $BASE_URL (default http://localhost:8080)
+#   - BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD set in the
+#     server's env so the admin account exists at boot
+# Run:  bash scripts/smoke_test.sh
 # ============================================================
 
-set -e
-BASE="http://localhost:8080"
+set -euo pipefail
+
+BASE="${BASE_URL:-http://localhost:8080}"
+ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-admin@lottery.local}"
+ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-Admin1234!ChangeMe}"
+TS=$(date +%s)
+USER_EMAIL="alice_${TS}@lottery.test"
+USER_PASSWORD="AlicePass1234"
+
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'
+NC='\033[0m'
 
-header() { echo -e "\n${BLUE}=== $1 ===${NC}"; }
-ok()     { echo -e "${GREEN}✓ $1${NC}"; }
+step()  { echo -e "\n${BLUE}=== $1 ===${NC}"; }
+ok()    { echo -e "${GREEN}✓ $1${NC}"; }
+err()   { echo -e "${RED}✗ $1${NC}"; exit 1; }
 
-header "1. Register admin"
-curl -s -X POST "$BASE/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@test.dev","password":"Admin1234!","full_name":"Test Admin"}' | jq .
-ok "Registered"
+jget() { jq -r "$2" <<<"$1"; }
 
-header "2. Login as admin"
-ADMIN_TOKEN=$(curl -s -X POST "$BASE/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@test.dev","password":"Admin1234!"}' | jq -r '.token')
-echo "Token: ${ADMIN_TOKEN:0:40}..."
-ok "Logged in"
+call() {
+  local method="$1" path="$2" token="${3:-}" body="${4:-}"
+  local args=(-s -X "$method" "${BASE}${path}" -H "Content-Type: application/json")
+  [[ -n "$token" ]] && args+=(-H "Authorization: Bearer $token")
+  [[ -n "$body"  ]] && args+=(-d "$body")
+  curl "${args[@]}"
+}
 
-header "3. Register two regular users"
-USER1_TOKEN=$(curl -s -X POST "$BASE/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@test.dev","password":"Alice1234!","full_name":"Alice"}' | jq -r '.token' 2>/dev/null || \
-  curl -s -X POST "$BASE/auth/login" \
-    -H "Content-Type: application/json" \
-    -d '{"email":"alice@test.dev","password":"Alice1234!"}' | jq -r '.token')
+step "1. Health"
+RESP=$(call GET /health)
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.status')" == "ok" ]] || err "health failed"
+ok "server is alive"
 
-# Register Alice properly
-curl -s -X POST "$BASE/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@test.dev","password":"Alice1234!","full_name":"Alice"}' > /dev/null 2>&1 || true
+step "2. Readiness"
+RESP=$(call GET /ready)
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.status')" == "ok" ]] || err "readiness failed"
+ok "datastores reachable"
 
-curl -s -X POST "$BASE/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"bob@test.dev","password":"Bob12345!","full_name":"Bob"}' > /dev/null 2>&1 || true
+step "3. Login as bootstrapped admin"
+RESP=$(call POST /auth/login "" "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
+ADMIN_TOKEN=$(jget "$RESP" '.data.token')
+[[ -n "$ADMIN_TOKEN" && "$ADMIN_TOKEN" != "null" ]] || err "admin login failed: $RESP"
+ok "admin token obtained"
 
-USER1_TOKEN=$(curl -s -X POST "$BASE/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@test.dev","password":"Alice1234!"}' | jq -r '.token')
+step "4. Register a regular user"
+RESP=$(call POST /auth/register "" "{\"email\":\"$USER_EMAIL\",\"password\":\"$USER_PASSWORD\",\"full_name\":\"Alice $TS\"}")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.success')" == "true" ]] || err "register failed"
+ok "user registered"
 
-USER2_TOKEN=$(curl -s -X POST "$BASE/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"bob@test.dev","password":"Bob12345!"}' | jq -r '.token')
+step "5. Log the user in"
+RESP=$(call POST /auth/login "" "{\"email\":\"$USER_EMAIL\",\"password\":\"$USER_PASSWORD\"}")
+USER_TOKEN=$(jget "$RESP" '.data.token')
+[[ -n "$USER_TOKEN" && "$USER_TOKEN" != "null" ]] || err "user login failed: $RESP"
+ok "user token obtained"
 
-ok "Users registered and logged in"
+step "6. /auth/me"
+RESP=$(call GET /auth/me "$USER_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.data.email')" == "$USER_EMAIL" ]] || err "me mismatch"
+ok "me works"
 
-header "4. Create an event (admin)"
-DRAW_TIME=$(date -u -d "+1 hour" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
-            date -u -v+1H '+%Y-%m-%dT%H:%M:%SZ')  # macOS fallback
+step "7. Create an event (admin)"
+DRAW_AT=$(python3 -c "from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+RESP=$(call POST /events "$ADMIN_TOKEN" "{\"title\":\"Smoke Event $TS\",\"description\":\"For testing\",\"capacity\":10,\"draw_at\":\"$DRAW_AT\",\"winner_count\":1}")
+echo "$RESP" | jq .
+EVENT_ID=$(jget "$RESP" '.data.id')
+[[ -n "$EVENT_ID" && "$EVENT_ID" != "null" ]] || err "create event failed"
+ok "event created (id: $EVENT_ID)"
 
-EVENT=$(curl -s -X POST "$BASE/events" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d "{
-    \"title\": \"VIP Concert Lottery\",
-    \"description\": \"Win 2 VIP passes\",
-    \"capacity\": 100,
-    \"draw_at\": \"$DRAW_TIME\"
-  }")
-echo "$EVENT" | jq .
-EVENT_ID=$(echo "$EVENT" | jq -r '.event.id')
-ok "Created event ID: $EVENT_ID"
+step "8. List events"
+RESP=$(call GET /events)
+echo "$RESP" | jq '{count: (.data|length), meta: .meta}'
 
-header "5. List events"
-curl -s "$BASE/events" \
-  -H "Authorization: Bearer $USER1_TOKEN" | jq .
-ok "Listed"
+step "9. User books the event"
+RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.success')" == "true" ]] || err "booking failed"
+ok "booked"
 
-header "6. Alice books the event"
-curl -s -X POST "$BASE/events/$EVENT_ID/book" \
-  -H "Authorization: Bearer $USER1_TOKEN" | jq .
-ok "Alice booked"
+step "10. Duplicate booking is rejected"
+RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.success')" == "false" ]] || err "duplicate booking should fail"
+ok "duplicate rejected"
 
-header "7. Bob books the event"
-curl -s -X POST "$BASE/events/$EVENT_ID/book" \
-  -H "Authorization: Bearer $USER2_TOKEN" | jq .
-ok "Bob booked"
+step "11. Admin lists bookings for the event"
+RESP=$(call GET "/events/${EVENT_ID}/bookings" "$ADMIN_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.success')" == "true" ]] || err "list bookings failed"
 
-header "8. Alice tries to book again (should fail)"
-DUPE=$(curl -s -X POST "$BASE/events/$EVENT_ID/book" \
-  -H "Authorization: Bearer $USER1_TOKEN")
-echo "$DUPE" | jq .
-ok "Duplicate booking rejected"
+step "12. Drawing before closing is rejected"
+RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.success')" == "false" ]] || err "premature draw should fail"
+ok "premature draw correctly rejected"
 
-header "9. Admin views all bookings"
-curl -s "$BASE/events/$EVENT_ID/bookings" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
-ok "Listed bookings"
+step "13. Close the event"
+RESP=$(call PUT "/events/${EVENT_ID}/close" "$ADMIN_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.data.status')" == "closed" ]] || err "close failed"
+ok "event closed"
 
-header "10. Admin closes the event"
-curl -s -X PUT "$BASE/events/$EVENT_ID/close" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" | jq .
-ok "Event closed"
+step "14. Booking after close is rejected"
+RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.success')" == "false" ]] || err "post-close booking should fail"
+ok "post-close booking rejected"
 
-header "11. Try to book closed event (should fail)"
-curl -s -X POST "$BASE/events/$EVENT_ID/book" \
-  -H "Authorization: Bearer $USER1_TOKEN" | jq .
-ok "Booking rejected after close"
+step "15. Draw the lottery"
+RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
+echo "$RESP" | jq .
+WINNER_COUNT=$(jget "$RESP" '.data.winners | length')
+[[ "$WINNER_COUNT" -ge 1 ]] || err "no winners produced"
+ok "draw complete with $WINNER_COUNT winner(s)"
 
-header "12. Admin draws the lottery (1 winner)"
-RESULTS=$(curl -s -X POST "$BASE/events/$EVENT_ID/draw" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"winners_count": 1}')
-echo "$RESULTS" | jq .
-ok "Draw complete"
+step "16. Re-drawing is rejected"
+RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.success')" == "false" ]] || err "re-draw should fail"
+ok "re-draw rejected (idempotency holds)"
 
-header "13. View results (public)"
-curl -s "$BASE/events/$EVENT_ID/results" \
-  -H "Authorization: Bearer $USER1_TOKEN" | jq .
-ok "Results visible"
-
-header "14. Try to draw again (should fail - idempotency)"
-curl -s -X POST "$BASE/events/$EVENT_ID/draw" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"winners_count": 1}' | jq .
-ok "Duplicate draw rejected"
-
-header "15. Health check"
-curl -s "$BASE/health" | jq .
-ok "Server healthy"
+step "17. Public results"
+RESP=$(call GET "/events/${EVENT_ID}/results")
+echo "$RESP" | jq .
+[[ "$(jget "$RESP" '.data.winners | length')" == "$WINNER_COUNT" ]] || err "results winner count mismatch"
+ok "results visible"
 
 echo -e "\n${GREEN}All smoke tests passed!${NC}"

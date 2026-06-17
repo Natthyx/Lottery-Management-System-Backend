@@ -2,14 +2,30 @@ package event
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/natannan/lottery-system/internal/models"
+
+	"github.com/Natthyx/lottery-system/internal/models"
 )
 
+// Domain errors. Handlers map these to HTTP codes.
+var (
+	ErrInvalidInput      = errors.New("invalid input")
+	ErrEventNotFound     = errors.New("event not found")
+	ErrInvalidTransition = errors.New("event status does not permit this transition")
+)
+
+const (
+	maxTitleLen       = 200
+	maxDescriptionLen = 4000
+)
+
+// Service holds event business logic.
 type Service struct {
 	db *pgxpool.Pool
 }
@@ -18,18 +34,34 @@ func NewService(db *pgxpool.Pool) *Service {
 	return &Service{db: db}
 }
 
+// Create validates input and inserts a new event in 'open' status.
 func (s *Service) Create(ctx context.Context, req models.CreateEventRequest, createdBy int64) (*models.Event, error) {
+	title := strings.TrimSpace(req.Title)
+	description := strings.TrimSpace(req.Description)
+
+	if title == "" {
+		return nil, fmt.Errorf("%w: title is required", ErrInvalidInput)
+	}
+	if len(title) > maxTitleLen {
+		return nil, fmt.Errorf("%w: title too long", ErrInvalidInput)
+	}
+	if len(description) > maxDescriptionLen {
+		return nil, fmt.Errorf("%w: description too long", ErrInvalidInput)
+	}
+	if req.DrawAt.IsZero() {
+		return nil, fmt.Errorf("%w: draw_at is required", ErrInvalidInput)
+	}
 	if req.DrawAt.Before(time.Now()) {
-		return nil, fmt.Errorf("draw_at must be in the future")
+		return nil, fmt.Errorf("%w: draw_at must be in the future", ErrInvalidInput)
 	}
 	if req.Capacity < 1 {
-		return nil, fmt.Errorf("capacity must be at least 1")
+		return nil, fmt.Errorf("%w: capacity must be at least 1", ErrInvalidInput)
 	}
 	if req.WinnerCount < 1 {
 		req.WinnerCount = 1
 	}
 	if req.WinnerCount > req.Capacity {
-		return nil, fmt.Errorf("winner_count cannot exceed capacity")
+		return nil, fmt.Errorf("%w: winner_count cannot exceed capacity", ErrInvalidInput)
 	}
 
 	var event models.Event
@@ -38,7 +70,7 @@ func (s *Service) Create(ctx context.Context, req models.CreateEventRequest, cre
 		INSERT INTO events (title, description, capacity, draw_at, winner_count, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, title, description, capacity, draw_at, status, winner_count, created_by, created_at, updated_at
-	`, req.Title, req.Description, req.Capacity, req.DrawAt, req.WinnerCount, createdBy).Scan(
+	`, title, description, req.Capacity, req.DrawAt, req.WinnerCount, createdBy).Scan(
 		&event.ID, &event.Title, &event.Description, &event.Capacity,
 		&event.DrawAt, &status, &event.WinnerCount, &event.CreatedBy,
 		&event.CreatedAt, &event.UpdatedAt,
@@ -50,6 +82,7 @@ func (s *Service) Create(ctx context.Context, req models.CreateEventRequest, cre
 	return &event, nil
 }
 
+// GetByID returns an event with its current booking count.
 func (s *Service) GetByID(ctx context.Context, id int64) (*models.Event, error) {
 	var event models.Event
 	var status string
@@ -67,16 +100,17 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*models.Event, error) 
 		&event.DrawAt, &status, &event.WinnerCount, &event.CreatedBy,
 		&event.CreatedAt, &event.UpdatedAt, &event.BookingCount,
 	)
-	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("event not found")
-	}
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEventNotFound
+		}
 		return nil, fmt.Errorf("fetching event: %w", err)
 	}
 	event.Status = models.EventStatus(status)
 	return &event, nil
 }
 
+// List returns events with pagination metadata.
 func (s *Service) List(ctx context.Context, status string, page, limit int) ([]models.Event, int, error) {
 	if page < 1 {
 		page = 1
@@ -88,7 +122,6 @@ func (s *Service) List(ctx context.Context, status string, page, limit int) ([]m
 
 	var rows pgx.Rows
 	var err error
-
 	if status != "" {
 		rows, err = s.db.Query(ctx, `
 			SELECT
@@ -120,7 +153,7 @@ func (s *Service) List(ctx context.Context, status string, page, limit int) ([]m
 	}
 	defer rows.Close()
 
-	var events []models.Event
+	events := []models.Event{}
 	for rows.Next() {
 		var e models.Event
 		var st string
@@ -134,46 +167,93 @@ func (s *Service) List(ctx context.Context, status string, page, limit int) ([]m
 		e.Status = models.EventStatus(st)
 		events = append(events, e)
 	}
-
-	// CRITICAL: always check rows.Err() after iteration
-	// If the DB connection dropped mid-query, rows.Next() returns false
-	// but rows.Err() will hold the actual error
 	if err := rows.Err(); err != nil {
 		return nil, 0, fmt.Errorf("iterating event rows: %w", err)
 	}
 
 	var total int
 	if status != "" {
-		s.db.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE status = $1`, status).Scan(&total) //nolint:errcheck
+		err = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM events WHERE status = $1`, status).Scan(&total)
 	} else {
-		s.db.QueryRow(ctx, `SELECT COUNT(*) FROM events`).Scan(&total) //nolint:errcheck
+		err = s.db.QueryRow(ctx, `SELECT COUNT(*) FROM events`).Scan(&total)
 	}
-
-	if events == nil {
-		events = []models.Event{}
+	if err != nil {
+		return nil, 0, fmt.Errorf("counting events: %w", err)
 	}
 
 	return events, total, nil
 }
 
-func (s *Service) Close(ctx context.Context, eventID int64) error {
-	result, err := s.db.Exec(ctx,
-		`UPDATE events SET status = 'closed' WHERE id = $1 AND status = 'open'`,
-		eventID,
-	)
+// Close transitions an event from 'open' to 'closed'. Idempotent if it
+// is already closed (returns the current event), but errors if the
+// event was drawn or cancelled.
+func (s *Service) Close(ctx context.Context, eventID int64) (*models.Event, error) {
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("closing event: %w", err)
+		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("event is not open or does not exist")
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var current string
+	err = tx.QueryRow(ctx, `SELECT status FROM events WHERE id = $1 FOR UPDATE`, eventID).Scan(&current)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEventNotFound
+		}
+		return nil, fmt.Errorf("loading event: %w", err)
 	}
-	return nil
+
+	switch current {
+	case string(models.EventStatusOpen):
+		if _, err := tx.Exec(ctx,
+			`UPDATE events SET status = 'closed' WHERE id = $1`, eventID,
+		); err != nil {
+			return nil, fmt.Errorf("closing event: %w", err)
+		}
+	case string(models.EventStatusClosed):
+		// Idempotent — already closed.
+	default:
+		return nil, fmt.Errorf("%w: cannot close event in status %q", ErrInvalidTransition, current)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return s.GetByID(ctx, eventID)
 }
 
-func (s *Service) MarkDrawn(ctx context.Context, eventID int64) error {
-	_, err := s.db.Exec(ctx,
-		`UPDATE events SET status = 'drawn' WHERE id = $1 AND status = 'closed'`,
-		eventID,
-	)
-	return err
+// Cancel transitions an event to 'cancelled' from open or closed.
+func (s *Service) Cancel(ctx context.Context, eventID int64) (*models.Event, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var current string
+	err = tx.QueryRow(ctx, `SELECT status FROM events WHERE id = $1 FOR UPDATE`, eventID).Scan(&current)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEventNotFound
+		}
+		return nil, fmt.Errorf("loading event: %w", err)
+	}
+
+	switch current {
+	case string(models.EventStatusOpen), string(models.EventStatusClosed):
+		if _, err := tx.Exec(ctx,
+			`UPDATE events SET status = 'cancelled' WHERE id = $1`, eventID,
+		); err != nil {
+			return nil, fmt.Errorf("cancelling event: %w", err)
+		}
+	case string(models.EventStatusCancelled):
+		// idempotent
+	default:
+		return nil, fmt.Errorf("%w: cannot cancel event in status %q", ErrInvalidTransition, current)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return s.GetByID(ctx, eventID)
 }
