@@ -1,0 +1,69 @@
+graph TB
+    subgraph "Concurrent Booking Requests"
+        REQ_A[Request A<br/>User 101 books Event 42]
+        REQ_B[Request B<br/>User 102 books Event 42]
+        REQ_C[Request C<br/>User 103 books Event 42]
+    end
+
+    subgraph "Layer 1: Redis Distributed Lock"
+        REDIS_LOCK{Redis SETNX<br/>lock:booking:event:42}
+        REDIS_A[Request A acquires lock<br/>token=abc123, TTL=5s]
+        REDIS_B_WAIT[Request B: BLOCKED<br/>lock key exists]
+        REDIS_C_WAIT[Request C: BLOCKED<br/>lock key exists]
+    end
+
+    subgraph "Layer 2: PostgreSQL Transaction + Row Lock"
+        PG_TX_START[BEGIN TRANSACTION]
+        PG_ROW_LOCK[SELECT status, capacity<br/>FROM events<br/>WHERE id=42<br/>FOR UPDATE]
+        PG_VALIDATE[Check:<br/>• status = 'open'<br/>• COUNT(bookings) < capacity]
+        PG_INSERT[INSERT INTO bookings<br/>event_id=42, user_id=101]
+        PG_COMMIT[COMMIT]
+    end
+
+    subgraph "Lock Release"
+        LUA_RELEASE[Lua Script:<br/>if GET(lock_key) == token<br/>then DEL(lock_key)]
+        OWNER_SAFE[Owner-safe release:<br/>Request A can only delete<br/>its own lock]
+    end
+
+    subgraph "Request B Retry Flow"
+        REQ_B_RETRY[Request B retries<br/>after A releases lock]
+        REDIS_B_ACQ[Request B acquires lock<br/>token=def456]
+        PG_TX_B[BEGIN TRANSACTION]
+        PG_RECHECK[Re-validate:<br/>COUNT(bookings) < capacity]
+        PG_INSERT_B[INSERT booking for user 102]
+        PG_COMMIT_B[COMMIT]
+        RELEASE_B[Release lock B]
+    end
+
+    REQ_A --> REDIS_LOCK
+    REQ_B --> REDIS_LOCK
+    REQ_C --> REDIS_LOCK
+    
+    REDIS_LOCK -->|Acquired| REDIS_A
+    REDIS_LOCK -->|Denied| REDIS_B_WAIT
+    REDIS_LOCK -->|Denied| REDIS_C_WAIT
+    
+    REDIS_A --> PG_TX_START
+    PG_TX_START --> PG_ROW_LOCK
+    PG_ROW_LOCK --> PG_VALIDATE
+    PG_VALIDATE -->|Valid| PG_INSERT
+    PG_INSERT --> PG_COMMIT
+    PG_COMMIT --> LUA_RELEASE
+    LUA_RELEASE --> OWNER_SAFE
+    
+    OWNER_SAFE --> REQ_B_RETRY
+    REQ_B_RETRY --> REDIS_B_ACQ
+    REDIS_B_ACQ --> PG_TX_B
+    PG_TX_B --> PG_RECHECK
+    PG_RECHECK --> PG_INSERT_B
+    PG_INSERT_B --> PG_COMMIT_B
+    PG_COMMIT_B --> RELEASE_B
+    
+    REDIS_B_WAIT -.->|Wait & retry| REQ_B_RETRY
+    REDIS_C_WAIT -.->|Wait & retry| REQ_B_RETRY
+
+    style REDIS_A fill:#90EE90
+    style REDIS_B_WAIT fill:#FFB6C1
+    style REDIS_C_WAIT fill:#FFB6C1
+    style PG_ROW_LOCK fill:#FFD700
+    style OWNER_SAFE fill:#87CEEB

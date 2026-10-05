@@ -1,0 +1,47 @@
+graph TB
+    START[Lottery Draw Triggered] --> LOCK[Acquire PostgreSQL<br/>Row Lock on Event]
+    
+    LOCK --> FETCH[Fetch All Participants<br/>SELECT user_id FROM bookings<br/>WHERE event_id=?<br/>ORDER BY booked_at]
+    
+    FETCH --> ARRAY[Participant Array<br/>users = 1, 2, 3, ..., n]
+    
+    ARRAY --> COPY[Copy Array<br/>Preserve original input]
+    
+    COPY --> SHUFFLE_START[Fisher-Yates Shuffle<br/>for i = n-1 down to 1]
+    
+    SHUFFLE_START --> CRYPTO[Generate Random Index j<br/>crypto/rand.Int reader, big.NewInt i+1]
+    
+    subgraph "Cryptographic Random Source"
+        CRYPTO_DETAIL["/dev/urandom<br/>Kernel entropy pool<br/>Hardware jitter<br/>Interrupt timing<br/>Same source as TLS keys"]
+    end
+    
+    CRYPTO --> CRYPTO_DETAIL
+    CRYPTO_DETAIL --> SWAP[Swap array i ↔ array j]
+    
+    SWAP --> CHECK{i > 0?}
+    CHECK -->|Yes| SHUFFLE_START
+    CHECK -->|No| SHUFFLED[Uniformly Shuffled Array<br/>Every permutation equally likely]
+    
+    SHUFFLED --> SPLIT{Split by winner_count}
+    
+    SPLIT --> WINNERS[Winners = array 0..winner_count-1<br/>Rank 1, 2, 3, ...]
+    SPLIT --> WAITLIST[Waitlist = array winner_count..n<br/>Rank winner_count+1, ...]
+    
+    WINNERS --> PERSIST_W[INSERT INTO lottery_draws<br/>draw_rank 1..winner_count<br/>entropy_source='crypto/rand+fisher-yates']
+    WAITLIST --> PERSIST_WL[INSERT INTO lottery_draws<br/>draw_rank winner_count+1..n<br/>entropy_source='crypto/rand+fisher-yates']
+    
+    PERSIST_W --> UPDATE[UPDATE events<br/>SET status='drawn']
+    PERSIST_WL --> UPDATE
+    
+    UPDATE --> COMMIT[COMMIT Transaction<br/>Atomic: all or nothing]
+    
+    COMMIT --> AUDIT[Append-only Audit Log<br/>UPDATE/DELETE revoked<br/>Tamper-evident]
+    
+    AUDIT --> DONE[Draw Complete<br/>Results Immutable]
+
+    style CRYPTO fill:#FFD700
+    style CRYPTO_DETAIL fill:#FF6347,color:#fff
+    style WINNERS fill:#90EE90
+    style WAITLIST fill:#87CEEB
+    style AUDIT fill:#DDA0DD
+    style COMMIT fill:#FF6347,color:#fff

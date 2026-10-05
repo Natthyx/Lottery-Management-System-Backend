@@ -1,0 +1,123 @@
+sequenceDiagram
+    autonumber
+    participant User
+    participant API
+    participant EventSvc as Event Service
+    participant BookingSvc as Booking Service
+    participant Redis
+    participant PostgreSQL as PostgreSQL<br/>(Transaction)
+    participant LotterySvc as Lottery Service
+
+    Note over User,LotterySvc: Phase 1: Event Creation (Admin)
+    User->>+API: POST /events (admin auth)
+    API->>+EventSvc: Create(title, capacity, winner_count, draw_at)
+    EventSvc->>+PostgreSQL: INSERT INTO events<br/>status='open'
+    PostgreSQL-->>-EventSvc: event_id
+    EventSvc-->>-API: Event created
+    API-->>-User: 201 Created
+
+    Note over User,LotterySvc: Phase 2: Ticket Booking (Authenticated User)
+    User->>+API: POST /events/{id}/book
+    API->>+BookingSvc: BookWithLock(event_id, user_id)
+    
+    BookingSvc->>+Redis: SETNX lock:booking:event:{id}<br/>token=random_hex, TTL=5s
+    alt Lock Acquired
+        Redis-->>BookingSvc: OK (lock acquired)
+        
+        BookingSvc->>+PostgreSQL: BEGIN TRANSACTION
+        PostgreSQL-->>BookingSvc: tx started
+        
+        BookingSvc->>PostgreSQL: SELECT status, capacity<br/>FROM events WHERE id=?<br/>FOR UPDATE
+        PostgreSQL-->>BookingSvc: status='open', capacity=10
+        
+        alt Status is NOT 'open'
+            BookingSvc-->>API: ErrEventNotOpen
+            API-->>User: 409 Conflict
+        end
+        
+        BookingSvc->>PostgreSQL: SELECT COUNT(*)<br/>FROM bookings WHERE event_id=?
+        PostgreSQL-->>BookingSvc: count=8
+        
+        alt Count >= Capacity
+            BookingSvc-->>API: ErrEventFull
+            API-->>User: 409 Conflict
+        end
+        
+        BookingSvc->>PostgreSQL: INSERT INTO bookings<br/>(event_id, user_id)
+        PostgreSQL-->>BookingSvc: booking created
+        
+        BookingSvc->>PostgreSQL: COMMIT
+        PostgreSQL-->>-BookingSvc: committed
+        
+        BookingSvc->>Redis: Lua compare-and-delete lock<br/>(owner-safe release)
+        Redis-->>-BookingSvc: lock released
+        
+        BookingSvc-->>-API: Booking confirmed
+        API-->>-User: 201 Created
+        
+    else Lock NOT Acquired
+        Redis-->>BookingSvc: FAILED (another request holds lock)
+        BookingSvc-->>-API: ErrEventBusy (retry)
+        API-->>-User: 409 Conflict (retry)
+    end
+
+    Note over User,LotterySvc: Phase 3: Close Event (Admin)
+    User->>+API: PUT /events/{id}/close
+    API->>+EventSvc: Close(event_id)
+    EventSvc->>+PostgreSQL: BEGIN TRANSACTION
+    EventSvc->>PostgreSQL: SELECT status FROM events<br/>WHERE id=? FOR UPDATE
+    PostgreSQL-->>EventSvc: status='open'
+    EventSvc->>PostgreSQL: UPDATE events<br/>SET status='closed'<br/>WHERE id=?
+    EventSvc->>PostgreSQL: COMMIT
+    PostgreSQL-->>-EventSvc: committed
+    EventSvc-->>-API: Event closed
+    API-->>-User: 200 OK
+
+    Note over User,LotterySvc: Phase 4: Lottery Draw (Admin)
+    User->>+API: POST /events/{id}/draw
+    API->>+LotterySvc: RunDraw(event_id)
+    
+    LotterySvc->>+PostgreSQL: BEGIN TRANSACTION
+    PostgreSQL-->>LotterySvc: tx started
+    
+    LotterySvc->>PostgreSQL: SELECT title, status, winner_count<br/>FROM events WHERE id=?<br/>FOR UPDATE (row lock)
+    PostgreSQL-->>LotterySvc: status='closed', winner_count=1
+    
+    alt Status NOT 'closed'
+        LotterySvc-->>API: ErrEventNotClosed / ErrEventAlreadyDrawn
+        API-->>User: 409 Conflict
+    end
+    
+    LotterySvc->>PostgreSQL: SELECT user_id FROM bookings<br/>WHERE event_id=?<br/>ORDER BY booked_at
+    PostgreSQL-->>LotterySvc: [user_1, user_2, ..., user_n]
+    
+    LotterySvc->>LotterySvc: crypto/rand Fisher-Yates shuffle<br/>SelectWinners(participants, winner_count)
+    
+    Note right of LotterySvc: Cryptographically<br/>secure randomness<br/>from kernel entropy
+    
+    loop For each winner (rank 1..winner_count)
+        LotterySvc->>PostgreSQL: INSERT INTO lottery_draws<br/>(event_id, winner_user_id, draw_rank,<br/>entropy_source='crypto/rand+fisher-yates')
+        PostgreSQL-->>LotterySvc: draw record created
+    end
+    
+    loop For each waitlist (rank winner_count+1..n)
+        LotterySvc->>PostgreSQL: INSERT INTO lottery_draws<br/>(event_id, winner_user_id, draw_rank)
+        PostgreSQL-->>LotterySvc: draw record created
+    end
+    
+    LotterySvc->>PostgreSQL: UPDATE events<br/>SET status='drawn'<br/>WHERE id=?
+    PostgreSQL-->>LotterySvc: status updated
+    
+    LotterySvc->>PostgreSQL: COMMIT
+    PostgreSQL-->>-LotterySvc: committed (atomic)
+    
+    LotterySvc-->>-API: DrawResult{winners, waitlist}
+    API-->>-User: 200 OK with full results
+
+    Note over User,LotterySvc: Phase 5: View Results (Public)
+    User->>+API: GET /events/{id}/results
+    API->>+LotterySvc: GetResults(event_id)
+    LotterySvc->>+PostgreSQL: SELECT * FROM lottery_draws<br/>WHERE event_id=?<br/>ORDER BY draw_rank
+    PostgreSQL-->>-LotterySvc: all draw records (append-only)
+    LotterySvc-->>-API: DrawResult
+    API-->>-User: 200 OK

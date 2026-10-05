@@ -1,0 +1,54 @@
+graph TB
+    subgraph "Lottery Draw Operation"
+        DRAW_START[Admin triggers lottery draw]
+        DRAW_TX[BEGIN TRANSACTION]
+        DRAW_LOCK[FOR UPDATE lock on event]
+        DRAW_ALGO[crypto/rand Fisher-Yates]
+    end
+
+    subgraph "Audit Log Creation"
+        INSERT_W[INSERT lottery_draws<br/>winner records<br/>draw_rank 1..N]
+        INSERT_WL[INSERT lottery_draws<br/>waitlist records<br/>draw_rank N+1..M]
+        COMMIT[COMMIT TRANSACTION<br/>Atomically persisted]
+    end
+
+    subgraph "Database-Level Protection"
+        SCHEMA[lottery_draws table schema]
+        REVOKE[REVOKE UPDATE, DELETE<br/>ON lottery_draws<br/>FROM PUBLIC]
+        IMMUTABLE[Attempts to UPDATE/DELETE<br/>raise permission error]
+    end
+
+    subgraph "Audit Record Contents"
+        FIELDS["• id (serial)<br/>• event_id<br/>• winner_user_id<br/>• draw_rank (1..N)<br/>• total_entrants<br/>• entropy_source<br/>• drawn_at (timestamp)"]
+    end
+
+    subgraph "Tamper Evidence"
+        READ_ONLY[Records are append-only]
+        NO_MODIFY[Cannot change past draws]
+        NO_DELETE[Cannot erase draw history]
+        FORENSIC[Full audit trail for compliance]
+    end
+
+    DRAW_START --> DRAW_TX
+    DRAW_TX --> DRAW_LOCK
+    DRAW_LOCK --> DRAW_ALGO
+    DRAW_ALGO --> INSERT_W
+    DRAW_ALGO --> INSERT_WL
+    INSERT_W --> COMMIT
+    INSERT_WL --> COMMIT
+
+    COMMIT --> SCHEMA
+    SCHEMA --> REVOKE
+    REVOKE --> IMMUTABLE
+
+    SCHEMA --> FIELDS
+    FIELDS --> READ_ONLY
+    READ_ONLY --> NO_MODIFY
+    NO_MODIFY --> NO_DELETE
+    NO_DELETE --> FORENSIC
+
+    style REVOKE fill:#FF6347,color:#fff
+    style IMMUTABLE fill:#FFD700
+    style COMMIT fill:#90EE90
+    style FORENSIC fill:#87CEEB
+    style READ_ONLY fill:#DDA0DD

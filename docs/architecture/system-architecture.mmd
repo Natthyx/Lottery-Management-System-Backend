@@ -1,0 +1,63 @@
+graph TB
+    subgraph "Client Layer"
+        CLIENT[Web/Mobile Client]
+    end
+
+    subgraph "API Gateway Layer"
+        ROUTER[Chi HTTP Router<br/>Port 8080]
+    end
+
+    subgraph "Middleware Layer"
+        MW_LOG[Logger]
+        MW_RECOVER[Recoverer]
+        MW_AUTH[JWT Authentication]
+        MW_RBAC[RBAC Authorization]
+        MW_RATE[Rate Limiter]
+        MW_CORS[CORS Handler]
+        MW_BODY[Body Limit 1MB]
+    end
+
+    subgraph "Application Services"
+        AUTH_SVC[Auth Service<br/>Registration, Login, JWT]
+        EVENT_SVC[Event Service<br/>CRUD, Status Machine]
+        BOOKING_SVC[Booking Service<br/>Distributed Locking]
+        LOTTERY_SVC[Lottery Service<br/>crypto/rand Fisher-Yates]
+    end
+
+    subgraph "Data Layer"
+        PG[(PostgreSQL<br/>pgx v5<br/>25 max connections)]
+        REDIS[(Redis<br/>Distributed Locks<br/>Rate Limiting)]
+    end
+
+    subgraph "Infrastructure"
+        DOCKER[Docker Compose<br/>Local Development]
+        K8S[Kubernetes Ready<br/>Production Deployment]
+    end
+
+    CLIENT --> ROUTER
+    ROUTER --> MW_LOG
+    MW_LOG --> MW_RECOVER
+    MW_RECOVER --> MW_RATE
+    MW_RATE --> MW_BODY
+    MW_BODY --> MW_CORS
+    MW_CORS --> MW_AUTH
+    MW_AUTH --> MW_RBAC
+
+    MW_RBAC --> AUTH_SVC
+    MW_RBAC --> EVENT_SVC
+    MW_RBAC --> BOOKING_SVC
+    MW_RBAC --> LOTTERY_SVC
+
+    AUTH_SVC --> PG
+    EVENT_SVC --> PG
+    BOOKING_SVC --> PG
+    BOOKING_SVC --> REDIS
+    LOTTERY_SVC --> PG
+
+    DOCKER -.-> ROUTER
+    K8S -.-> ROUTER
+
+    style PG fill:#4169E1,stroke:#000,color:#fff
+    style REDIS fill:#DC382D,stroke:#000,color:#fff
+    style LOTTERY_SVC fill:#90EE90,stroke:#000
+    style BOOKING_SVC fill:#FFD700,stroke:#000
