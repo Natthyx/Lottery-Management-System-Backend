@@ -1,0 +1,53 @@
+SELECT 'per_event' AS section, e.id AS event_id, e.capacity, count(b.id) AS bookings,
+       count(DISTINCT b.user_id) AS distinct_users
+FROM events e LEFT JOIN bookings b ON b.event_id = e.id
+GROUP BY e.id HAVING count(b.id) > 0
+ORDER BY e.id
+LIMIT 20;
+  section  | event_id | capacity | bookings | distinct_users 
+-----------+----------+----------+----------+----------------
+ per_event |        1 |     1000 |      553 |            553
+ per_event |        2 |     1000 |      553 |            553
+ per_event |        3 |     1000 |      553 |            553
+ per_event |        4 |     1000 |      553 |            553
+ per_event |        5 |     1000 |      553 |            553
+ per_event |        6 |     1000 |      553 |            553
+ per_event |        7 |     1000 |      553 |            553
+ per_event |        8 |     1000 |      553 |            553
+ per_event |        9 |     1000 |      553 |            553
+ per_event |       10 |     1000 |      553 |            553
+ per_event |       11 |     1000 |      553 |            553
+ per_event |       12 |     1000 |      553 |            553
+ per_event |       13 |     1000 |      553 |            553
+ per_event |       14 |     1000 |      553 |            553
+ per_event |       15 |     1000 |      553 |            553
+ per_event |       16 |     1000 |      553 |            553
+ per_event |       17 |     1000 |      553 |            553
+ per_event |       18 |     1000 |      553 |            553
+ per_event |       19 |     1000 |      553 |            553
+ per_event |       20 |     1000 |      553 |            553
+(20 rows)
+
+WITH dup AS (
+  SELECT event_id, user_id, count(*) c FROM bookings GROUP BY 1, 2 HAVING count(*) > 1
+), over AS (
+  SELECT e.id FROM events e JOIN bookings b ON b.event_id = e.id
+  GROUP BY e.id, e.capacity HAVING count(*) > e.capacity
+), tot AS (SELECT count(*) n FROM bookings)
+SELECT 'duplicate (event,user) pairs' AS check, (SELECT count(*) FROM dup)::text AS observed,
+       CASE WHEN (SELECT count(*) FROM dup) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
+UNION ALL
+SELECT 'events over capacity', (SELECT count(*) FROM over)::text,
+       CASE WHEN (SELECT count(*) FROM over) = 0 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+SELECT 'total bookings vs client-observed 201s',
+       (SELECT n FROM tot) || ' vs ' || 27638,
+       CASE WHEN 27638 < 0 THEN 'SKIPPED'
+            WHEN (SELECT n FROM tot) = 27638 THEN 'PASS' ELSE 'FAIL' END;
+                 check                  |    observed    | result 
+----------------------------------------+----------------+--------
+ duplicate (event,user) pairs           | 0              | PASS
+ events over capacity                   | 0              | PASS
+ total bookings vs client-observed 201s | 27638 vs 27638 | PASS
+(3 rows)
+

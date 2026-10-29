@@ -1,0 +1,4 @@
+{
+  "description": "L2a hot event, N=200 users, VUs=200, shared-iterations, one POST /book per user, no client retry. Capacity 200.",
+  "stage_seconds": 0
+}

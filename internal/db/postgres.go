@@ -11,17 +11,17 @@ import (
 
 // NewPool creates a production-grade PostgreSQL connection pool.
 //
-// pgxpool sizing rationale: with multiple app replicas each capped at 25,
-// we leave room for migrations, monitoring, and admin queries within
-// Postgres's default max_connections of 100.
-func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+// pgxpool sizing rationale: with multiple app replicas each capped at 25
+// (DB_MAX_CONNS default), we leave room for migrations, monitoring, and
+// admin queries within Postgres's default max_connections of 100.
+func NewPool(ctx context.Context, databaseURL string, maxConns, minConns int32) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing database URL: %w", err)
 	}
 
-	config.MaxConns = 25
-	config.MinConns = 5
+	config.MaxConns = maxConns
+	config.MinConns = minConns
 	config.MaxConnLifetime = 30 * time.Minute
 	config.MaxConnIdleTime = 5 * time.Minute
 	config.HealthCheckPeriod = 1 * time.Minute

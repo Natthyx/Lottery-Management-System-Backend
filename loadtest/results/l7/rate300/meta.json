@@ -1,0 +1,4 @@
+{
+  "description": "L7 read load, constant-arrival-rate 300 req/s total (1/3 each: GET /events, GET /events/{id}, GET /events/{id}/results), 60 s. Event 1 is drawn with 1000 entrants.",
+  "stage_seconds": 0
+}

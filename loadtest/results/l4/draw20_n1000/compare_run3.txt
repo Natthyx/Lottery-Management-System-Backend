@@ -1,0 +1,8 @@
+lines: db=    1000 api_results=    1000 post_response=    1000
+db vs GET /results: IDENTICAL
+db vs POST /draw 200 body: IDENTICAL
+winners in GET /results: 100  waitlist: 900
+GET /results integrity: verified
+seal digest: eff48cbd8bc715f1d225a22ebbab0cf2f4e83c6bdb076af525525807ee88ccc5
+POST /draw digest matches seal: true
+seal rows for event: 1

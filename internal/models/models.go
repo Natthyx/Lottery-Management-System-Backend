@@ -68,6 +68,12 @@ type DrawResult struct {
 	Winners       []LotteryDraw `json:"winners"`
 	Waitlist      []LotteryDraw `json:"waitlist"`
 	DrawnAt       time.Time     `json:"drawn_at"`
+	// Digest is the SHA-256 seal of the draw, recorded when it ran. Anyone
+	// who kept it can re-verify the published results later.
+	Digest string `json:"digest,omitempty"`
+	// Integrity is "verified" when the stored rows still hash to the seal,
+	// "mismatch" when they do not, "unsealed" for draws made before seals.
+	Integrity string `json:"integrity,omitempty"`
 }
 
 // ── Request / Response DTOs ──────────────────────────────────────────────────
@@ -110,7 +116,10 @@ type APIResponse struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data,omitempty"`
 	Error   string      `json:"error,omitempty"`
-	Meta    *Meta       `json:"meta,omitempty"`
+	// Code is a stable, machine-readable error identifier (e.g.
+	// "event_busy", "already_booked") so clients don't have to parse Error.
+	Code string `json:"code,omitempty"`
+	Meta *Meta  `json:"meta,omitempty"`
 }
 
 // Meta carries pagination info for list endpoints.

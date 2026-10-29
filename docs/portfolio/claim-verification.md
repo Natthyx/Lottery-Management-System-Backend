@@ -30,7 +30,10 @@ This document verifies every technical claim about the lottery backend system ag
 | bcrypt password hashing | ✅ YES | `internal/auth/service.go` lines 51-53: `bcrypt.GenerateFromPassword` cost 12 | 100% |
 | Timing-safe login | ✅ YES | `internal/auth/service.go` lines 78-85: bcrypt comparison on dummy hash in no-user branch | 100% |
 | Role-based access control | ✅ YES | `internal/middleware/auth.go` lines 76-85: RequireAdmin middleware | 100% |
-| Rate limiting (per-IP) | ✅ YES | `cmd/server/main.go` lines 96, 105: `httprate.LimitByIP` for auth and API | 100% |
+| Rate limiting (per-IP) | ✅ YES | `cmd/server/main.go` lines 114, 121: `httprate.LimitByIP` for API and auth | 100% |
+| Spoof-resistant client IP | ✅ YES | `cmd/server/main.go` line 98 + `internal/middleware/clientip.go` line 21: keys on TCP peer IP; `X-Forwarded-For`/`X-Real-IP` honoured only from `TRUSTED_PROXIES` (replaces chi `RealIP`, which let any client spoof its IP) | 100% |
+| Per-account login limit | ✅ YES | `cmd/server/main.go` lines 125-127 + `internal/middleware/clientip.go` line 98: 10 attempts per 15 min keyed by email (in addition to per-IP) | 100% |
+| Health/ready exempt from rate limits | ✅ YES | `cmd/server/main.go` lines 110-111: registered outside the rate-limited group | 100% |
 | JWT algorithm validation | ✅ YES | `internal/middleware/auth.go` lines 55, 65: `WithValidMethods(["HS256"])` prevents alg:none | 100% |
 | User enumeration prevention | ✅ YES | `internal/auth/service.go` lines 81-85: same error message + timing for no-user and wrong-password | 100% |
 
@@ -40,12 +43,17 @@ This document verifies every technical claim about the lottery backend system ag
 
 | Feature | Found? | Evidence | Confidence |
 |---------|---------|----------|------------|
-| Redis distributed locking | ✅ YES | `internal/booking/service.go` lines 62-70: `SETNX` with token and TTL | 100% |
-| Owner-safe lock release | ✅ YES | `internal/booking/service.go` lines 35-41: Lua compare-and-delete script | 100% |
-| PostgreSQL SELECT FOR UPDATE | ✅ YES | `internal/booking/service.go` lines 87-92: row-level lock in transaction | 100% |
-| Transaction-based booking | ✅ YES | `internal/booking/service.go` lines 80-116: BEGIN → validate → INSERT → COMMIT | 100% |
-| Lock TTL (5 seconds default) | ✅ YES | `internal/config/config.go` line 82: `getDuration("LOCK_TTL", 5*time.Second)` | 100% |
-| Random lock token (crypto/rand) | ✅ YES | `internal/booking/service.go` lines 146-152: 16-byte random hex | 100% |
+| In-process per-event FIFO queue | ✅ YES | `internal/booking/gate.go` lines 8-49: arrival-order gate; `internal/booking/service.go` lines 94-98: requests wait here holding no DB connection | 100% |
+| Redis distributed locking | ✅ YES | `internal/booking/service.go` lines 123-151: `SetNX` with token and TTL, retried with bounded jittered backoff | 100% |
+| Owner-safe lock release | ✅ YES | `internal/booking/service.go` lines 36-41: Lua compare-and-delete script; released on completion (lines 108-118) | 100% |
+| PostgreSQL SELECT FOR UPDATE | ✅ YES | `internal/booking/service.go` lines 166-169: row-level lock in transaction | 100% |
+| Transaction-based booking | ✅ YES | `internal/booking/service.go` lines 157-216: BEGIN → duplicate/status/capacity checks → INSERT → COMMIT | 100% |
+| Bounded wait, then 503 | ✅ YES | `internal/config/config.go` line 125: `LOCK_WAIT_TIMEOUT` default 10s; `internal/booking/handler.go` lines 39-42: 503 `event_busy` + `Retry-After` | 100% |
+| Explicit final outcomes | ✅ YES | `internal/booking/handler.go` lines 43-48: 409 `already_booked` / `event_not_open` / `event_full`; duplicate checked first (`service.go` lines 177-185) | 100% |
+| Lock TTL (5 seconds default) | ✅ YES | `internal/config/config.go` line 124: `getDuration("LOCK_TTL", 5*time.Second)` — a safety net for crashed holders only; the lock is released on completion, so it does **not** limit bookings to one per 5s | 100% |
+| Random lock token (crypto/rand) | ✅ YES | `internal/booking/service.go` lines 272-278: 16-byte random hex | 100% |
+| Never oversells / no duplicates under contention | ✅ YES | `internal/integration/integration_test.go`: `TestBooking_ConcurrentRequestsQueueAndNeverOversell` (line 222), `TestBooking_ParallelDuplicatesYieldExactlyOne` (line 262), `TestBooking_BusyOnlyAfterBoundedWait` (line 311) | 100% |
+| Redis outage behaviour | ⚠️ FAIL CLOSED | `internal/booking/service.go` lines 134-136: Redis error → 500. Correct (never oversells) but bookings are unavailable while Redis is down | 100% |
 
 ---
 
@@ -68,8 +76,15 @@ This document verifies every technical claim about the lottery backend system ag
 |---------|---------|----------|------------|
 | Event status machine | ✅ YES | `migrations/001_init.sql` lines 21-22: CHECK constraint on status enum | 100% |
 | Unique booking constraint | ✅ YES | `migrations/001_init.sql` line 40: UNIQUE (event_id, user_id) | 100% |
-| Audit trail (lottery_draws) | ✅ YES | `migrations/001_init.sql` lines 44-56: lottery_draws table | 100% |
-| REVOKE UPDATE/DELETE | ✅ YES | `migrations/001_init.sql` lines 61-63: permission revocation | 100% |
+| Audit trail (lottery_draws) | ✅ YES | `internal/db/migrations/001_init.sql` lines 52-64: lottery_draws table | 100% |
+| ~~REVOKE UPDATE/DELETE~~ | ❌ NOT A PROTECTION | `001_init.sql` line 68: `REVOKE ... FROM PUBLIC` did nothing (PUBLIC never had those privileges). Do not cite it | 100% |
+| Append-only triggers (every role, incl. owner/superuser) | ✅ YES | `internal/db/migrations/002_harden_audit.sql` lines 13-29 (`lottery_draws`) and 41-49 (`lottery_draw_seals`): BEFORE UPDATE/DELETE and BEFORE TRUNCATE raise an error | 100% |
+| Drawn event is final | ✅ YES | `002_harden_audit.sql` lines 55-77: `trg_events_drawn_is_final` freezes status, winner_count, capacity | 100% |
+| Least-privilege runtime role | ✅ YES | `deploy/postgres/initdb/01-app-role.sh` + `002_harden_audit.sql` lines 85-97: `lottery_app` has SELECT/INSERT only on audit tables, owns nothing; migrations run via `MIGRATION_DATABASE_URL` | 100% |
+| Draw seal (SHA-256) | ✅ YES | `internal/lottery/seal.go` lines 30-39; stored in `lottery/service.go` lines 163-169, logged at warn lines 184-189, re-verified by GET /results lines 260-276 (`integrity`: `verified` / `mismatch`) | 100% |
+| Audit trail tests | ✅ YES | `internal/integration/integration_test.go`: `TestAuditTrail_RuntimeRoleCannotModify` (line 134), `TestAuditTrail_TriggersBlockEvenTheOwner` (line 157), `TestAuditTrail_SealDetectsSuperuserTampering` (line 178) | 100% |
+| Draw refused before draw_at | ✅ YES | `internal/lottery/service.go` lines 62, 85-87; `handler.go` line 42: 409 `draw_not_due`; test `TestDraw_RefusedBeforeDrawAt` (line 367) | 100% |
+| MAX_WINNERS enforced | ✅ YES | `internal/event/service.go` lines 69-70; `internal/config/config.go` line 126 | 100% |
 | Foreign key constraints | ✅ YES | `migrations/001_init.sql` lines 32-34: references users, events | 100% |
 | Capacity validation | ✅ YES | `migrations/001_init.sql` line 25: CHECK winner_count <= capacity | 100% |
 | updated_at trigger | ✅ YES | `migrations/001_init.sql` lines 66-79: automatic timestamp update | 100% |
@@ -124,7 +139,7 @@ This document verifies every technical claim about the lottery backend system ag
 | Payment integration (Stripe/PayPal) | ❌ NO | No payment provider imports in go.mod, no payment service in internal/ | 100% |
 | Webhook handlers | ❌ NO | No webhook signature verification code, no webhook endpoints | 100% |
 | HMAC-SHA256 webhook verification | ❌ NO | Not implemented (no webhook system exists) | 100% |
-| Exponential backoff | ❌ NO | No retry logic with exponential backoff found | 100% |
+| Client-facing retry/backoff | ❌ NO | Only internal: Redis lock acquisition uses bounded jittered backoff (`internal/booking/service.go` lines 123-151); clients get `Retry-After` on 503 | 100% |
 | Idempotency keys (request headers) | ❌ NO | Idempotency via DB constraints only, no request header validation | 100% |
 | Double-entry accounting | ❌ NO | No financial ledger, no debit/credit entries | 100% |
 | Background workers/jobs | ❌ NO | No job queue, no async workers | 100% |
@@ -143,8 +158,8 @@ This document verifies every technical claim about the lottery backend system ag
 | Feature | Status | Evidence | Notes |
 |---------|--------|----------|-------|
 | Kubernetes deployment | READY | Health/readiness probes exist, but no K8s manifests in repo | No YAML files, but application is K8s-compatible |
-| Load testing | MENTIONED | README mentions it but no code/scripts in repo | Can claim "designed for" but not "tested with" |
-| Performance metrics | NONE | No benchmarks in codebase | Cannot claim specific throughput numbers |
+| Load testing | LOCAL | k6 suite in `loadtest/`; measured results: [`loadtest/REPORT.md`](../../loadtest/REPORT.md) (local, single machine) | Can claim "load tested locally"; not production-scale |
+| Performance metrics | LOCAL ONLY | Only the figures in `loadtest/REPORT.md` (local, single machine) | Quote numbers only from that report, with that qualification |
 
 ---
 
@@ -183,7 +198,9 @@ This document verifies every technical claim about the lottery backend system ag
 | Timing attack prevention | ✅ YES | Constant-time bcrypt comparison in login |
 | CSRF protection | ⚠️ N/A | Stateless JWT (no cookies), CSRF not applicable |
 | XSS prevention | ⚠️ N/A | Backend API only, no HTML rendering |
-| Rate limiting | ✅ YES | Per-IP limits on auth and API endpoints |
+| Rate limiting | ✅ YES | Per-IP limits on auth and API endpoints (IP not spoofable unless via `TRUSTED_PROXIES`), plus per-account login limit |
+| Audit-trail integrity | ✅ YES | Append-only triggers, least-privilege runtime role, SHA-256 draw seal |
+| Network exposure (local) | ✅ YES | `docker-compose.yml` lines 14, 30: Postgres and Redis bound to 127.0.0.1 |
 | TLS/HTTPS | ⚠️ EXTERNAL | Expects TLS termination at load balancer |
 
 ---
@@ -192,14 +209,15 @@ This document verifies every technical claim about the lottery backend system ag
 
 ### ✅ SAFE TO CLAIM:
 
-**"Implemented defense-in-depth concurrency control using Redis distributed locking and PostgreSQL row-level locking"**
-- Evidence: `internal/booking/service.go` lines 62-70, 87-92
+**"Implemented defense-in-depth concurrency control: per-event FIFO queuing, Redis distributed locking and PostgreSQL row-level locking — never oversells, even if Redis fails"**
+- Evidence: `internal/booking/gate.go` lines 8-49, `internal/booking/service.go` lines 123-151, 166-169; `internal/integration/integration_test.go` line 222
 
 **"Built cryptographically secure lottery system using crypto/rand and Fisher-Yates algorithm"**
 - Evidence: `internal/lottery/algorithm.go` lines 48-67
 
-**"Designed immutable audit trail with database-level permission enforcement"**
-- Evidence: `migrations/001_init.sql` lines 61-63
+**"Designed an append-only, tamper-evident audit trail: database triggers, a least-privilege runtime role that cannot modify past draws, and a SHA-256 seal re-verified on every read"**
+- Evidence: `internal/db/migrations/002_harden_audit.sql` lines 13-49, 85-97; `internal/lottery/seal.go` lines 30-39; `internal/integration/integration_test.go` `TestAuditTrail_*` (lines 134, 157, 178)
+- Always pair with the residual risk: owner/superuser DB credentials can still disable triggers (or use `session_replication_role=replica`); that is not prevented, but the seal detects it (verified in the load test: a superuser winner-swap flipped `/results` to `"mismatch"`)
 
 **"Deployed via multi-stage Docker builds targeting distroless containers for minimal attack surface"**
 - Evidence: `Dockerfile` lines 5-31
@@ -217,9 +235,13 @@ This document verifies every technical claim about the lottery backend system ag
 - ❌ "Integrated with Stripe/PayPal for payment processing"
 - ❌ "Implemented webhook signature verification with HMAC-SHA256"
 - ❌ "Built double-entry accounting ledger"
-- ❌ "Handles 100,000 requests per second" (no load test evidence)
-- ❌ "Exponential backoff retry mechanism"
+- ❌ "Handles 100,000 requests per second" (only local, single-machine load test evidence — see `loadtest/REPORT.md`)
+- ❌ "Client-side exponential backoff retry mechanism" (backoff is internal to lock acquisition only)
 - ❌ "Background job queue with workers"
+- ❌ "Immutable audit trail" / "impossible to tamper with results" (a DB superuser can disable triggers; say "append-only and tamper-evident")
+- ❌ "Audit trail protected by REVOKE permissions" (that REVOKE had no effect)
+- ❌ "Stays available if Redis fails" (bookings fail closed with 500)
+- ❌ "Lock TTL limits bookings to one per event per 5s" (the lock is released on completion)
 
 ---
 
@@ -234,8 +256,8 @@ This document verifies every technical claim about the lottery backend system ag
 ❌ Incorrect: "Centralized logging with Elasticsearch"
 
 **"High-performance concurrent design"**
-✅ Correct: "Designed for high-concurrency scenarios with distributed locking"
-❌ Incorrect: "Benchmarked at X requests/second"
+✅ Correct: "Designed for high-concurrency scenarios with distributed locking; load tested locally (see `loadtest/REPORT.md`)"
+❌ Incorrect: "Benchmarked at X requests/second" without the local, single-machine qualification
 
 ---
 
@@ -243,9 +265,10 @@ This document verifies every technical claim about the lottery backend system ag
 
 ### Core Business Logic
 - **Auth:** `internal/auth/service.go` (registration, login, JWT generation)
-- **Booking:** `internal/booking/service.go` (Redis + PostgreSQL locking)
-- **Event:** `internal/event/service.go` (CRUD, status machine)
-- **Lottery:** `internal/lottery/service.go` (draw orchestration), `internal/lottery/algorithm.go` (crypto/rand Fisher-Yates)
+- **Booking:** `internal/booking/service.go` (Redis + PostgreSQL locking), `internal/booking/gate.go` (per-event FIFO queue)
+- **Event:** `internal/event/service.go` (CRUD, status machine, MAX_WINNERS)
+- **Lottery:** `internal/lottery/service.go` (draw orchestration, seal verification), `internal/lottery/algorithm.go` (crypto/rand Fisher-Yates), `internal/lottery/seal.go` (SHA-256 draw digest)
+- **Audit hardening:** `internal/db/migrations/002_harden_audit.sql` (triggers, seals table, runtime grants), `deploy/postgres/initdb/01-app-role.sh` (`lottery_app` role)
 
 ### Infrastructure
 - **Database:** `internal/db/postgres.go` (connection pool), `internal/db/redis.go` (Redis client), `internal/db/migrate.go` (migration runner)
@@ -259,7 +282,9 @@ This document verifies every technical claim about the lottery backend system ag
 
 ### Testing
 - **Unit:** `internal/lottery/algorithm_test.go` (fairness validation)
+- **Integration:** `internal/integration/integration_test.go` (audit trail, booking concurrency, draw tests against real PostgreSQL + Redis)
 - **E2E:** `scripts/smoke_test.sh` (full workflow)
+- **Load:** `loadtest/` (k6 suite), results in `loadtest/REPORT.md` (local, single machine)
 
 ---
 
@@ -293,7 +318,7 @@ This document was created by:
 ### Example Good Responses:
 
 **Client:** "Does your system prevent overselling?"
-**You:** "Yes, using dual-layer concurrency control. Redis distributed locking serializes requests, and PostgreSQL SELECT FOR UPDATE guarantees atomicity. The implementation is in `internal/booking/service.go` lines 62-92. I can walk you through it."
+**You:** "Yes, using layered concurrency control. Requests for the same event queue in arrival order, a Redis lock serializes them across replicas, and PostgreSQL SELECT FOR UPDATE guarantees correctness even if Redis is bypassed. If Redis is down, bookings fail closed rather than risk overselling. The implementation is in `internal/booking/service.go` lines 71-216 and `internal/booking/gate.go`. I can walk you through it."
 
 **Client:** "How do you handle payment processing?"
 **You:** "The current implementation doesn't include payment integration. It focuses on the lottery mechanics, concurrency control, and audit trails. Payment integration would be a natural next phase using Stripe or your preferred provider."

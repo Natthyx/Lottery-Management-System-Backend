@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoad_RequiresJWTSecret(t *testing.T) {
@@ -74,5 +75,53 @@ func TestSplitCSV(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("idx %d: got %q want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestLoad_TrustedProxies(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 32))
+	t.Setenv("TRUSTED_PROXIES", "10.0.0.0/8, 192.168.1.7")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.TrustedProxies) != 2 || cfg.TrustedProxies[0].String() != "10.0.0.0/8" || cfg.TrustedProxies[1].String() != "192.168.1.7/32" {
+		t.Fatalf("got %v", cfg.TrustedProxies)
+	}
+}
+
+func TestLoad_RejectsBadTrustedProxy(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 32))
+	t.Setenv("TRUSTED_PROXIES", "not-an-ip")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") {
+		t.Fatalf("expected TRUSTED_PROXIES error, got %v", err)
+	}
+}
+
+func TestLoad_DefaultsTrustNoProxy(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 32))
+	t.Setenv("TRUSTED_PROXIES", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.TrustedProxies) != 0 {
+		t.Fatalf("expected no trusted proxies by default, got %v", cfg.TrustedProxies)
+	}
+	if cfg.DBMaxConns != 25 || cfg.DBMinConns != 5 || cfg.LockWait != 10*time.Second {
+		t.Fatalf("unexpected defaults: max=%d min=%d wait=%v", cfg.DBMaxConns, cfg.DBMinConns, cfg.LockWait)
+	}
+}
+
+func TestLoad_RejectsInvalidPoolBounds(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 32))
+	t.Setenv("DB_MAX_CONNS", "4")
+	t.Setenv("DB_MIN_CONNS", "5")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "DB_MAX_CONNS") {
+		t.Fatalf("expected pool bounds error, got %v", err)
 	}
 }

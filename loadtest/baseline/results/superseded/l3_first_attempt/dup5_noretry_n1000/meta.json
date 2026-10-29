@@ -1,0 +1,4 @@
+{
+  "description": "L3 duplicates, N=1000 users, each sends 5 identical POST /book in parallel (http.batch), VUs=min(N,200). retry=0 (busy-409 retried until a non-busy answer). Capacity 5N.",
+  "stage_seconds": 0
+}

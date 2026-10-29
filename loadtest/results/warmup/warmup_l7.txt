@@ -1,0 +1,31 @@
+testRunDurationMs=10006.455
+data_received: rate=17383044.845 count=173942656
+data_received{ep:get}: count=603603 rate=60321.363
+data_received{ep:list}: count=5058053 rate=505479.013
+data_received{ep:results}: count=168281000 rate=16817244.469
+data_sent: count=243156 rate=24299.914
+dropped_iterations: count=0 rate=0
+http_req_blocked: max=1.979 count=3002 min=0.001 med=0.005 avg=0.024 p(90)=0.009 p(95)=0.099 p(99)=0.501
+http_req_connecting: avg=0.015 p(90)=0 p(95)=0 p(99)=0.425 max=1.933 count=3002 min=0 med=0
+http_req_duration: p(90)=4.279 p(95)=5.524 p(99)=10.133 max=36.27 count=3002 min=0.564 med=1.933 avg=2.458
+http_req_duration{ep:get}: p(90)=1.92 p(95)=2.531 p(99)=6.566 max=29.911 count=1001 min=0.564 med=0.97 avg=1.303
+http_req_duration{ep:list}: max=27.44 count=1001 min=0.902 med=1.703 avg=2.159 p(90)=3.19 p(95)=4.148 p(99)=9.313
+http_req_duration{ep:results}: p(95)=7.139 p(99)=12.609 max=36.27 count=1000 min=2.068 med=3.221 avg=3.915 p(90)=5.601
+http_req_duration{expected_response:true}: p(95)=5.524 p(99)=10.133 max=36.27 count=3002 min=0.564 med=1.933 avg=2.458 p(90)=4.279
+http_req_failed: rate=0 passes=0 fails=3002
+http_req_failed{ep:get}: rate=0 passes=0 fails=1001
+http_req_failed{ep:list}: passes=0 fails=1001 rate=0
+http_req_failed{ep:results}: rate=0 passes=0 fails=1000
+http_req_receiving: p(95)=0.553 p(99)=1.972 max=7.777 count=3002 min=0.01 med=0.033 avg=0.221 p(90)=0.43
+http_req_sending: p(95)=0.037 p(99)=0.082 max=2.44 count=3002 min=0.002 med=0.013 avg=0.019 p(90)=0.024
+http_req_tls_handshaking: p(95)=0 p(99)=0 max=0 count=3002 min=0 med=0 avg=0 p(90)=0
+http_req_waiting: p(90)=3.685 p(95)=4.864 p(99)=9.107 max=34.508 count=3002 min=0.544 med=1.862 avg=2.219
+http_reqs: count=3002 rate=300.006
+http_reqs{ep:get}: count=1001 rate=100.035
+http_reqs{ep:list}: count=1001 rate=100.035
+http_reqs{ep:results}: count=1000 rate=99.935
+iteration_duration: p(99)=10.397 max=36.433 count=3002 min=0.603 med=2.079 avg=2.602 p(90)=4.477 p(95)=5.73
+iterations: count=3002 rate=300.006
+st_2xx: count=3002 rate=300.006
+vus: value=3 min=0 max=3
+vus_max: value=150 min=150 max=150

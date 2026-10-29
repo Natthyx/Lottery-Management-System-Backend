@@ -1,5 +1,5 @@
 graph TB
-    START[Lottery Draw Triggered] --> LOCK[Acquire PostgreSQL<br/>Row Lock on Event]
+    START[Lottery Draw Triggered] --> LOCK[Acquire PostgreSQL<br/>Row Lock on Event<br/>Require status='closed'<br/>and draw_at reached]
     
     LOCK --> FETCH[Fetch All Participants<br/>SELECT user_id FROM bookings<br/>WHERE event_id=?<br/>ORDER BY booked_at]
     
@@ -30,14 +30,16 @@ graph TB
     WINNERS --> PERSIST_W[INSERT INTO lottery_draws<br/>draw_rank 1..winner_count<br/>entropy_source='crypto/rand+fisher-yates']
     WAITLIST --> PERSIST_WL[INSERT INTO lottery_draws<br/>draw_rank winner_count+1..n<br/>entropy_source='crypto/rand+fisher-yates']
     
-    PERSIST_W --> UPDATE[UPDATE events<br/>SET status='drawn']
-    PERSIST_WL --> UPDATE
-    
+    PERSIST_W --> SEAL[INSERT INTO lottery_draw_seals<br/>SHA-256 digest over the<br/>full ordered outcome]
+    PERSIST_WL --> SEAL
+
+    SEAL --> UPDATE[UPDATE events<br/>SET status='drawn']
+
     UPDATE --> COMMIT[COMMIT Transaction<br/>Atomic: all or nothing]
-    
-    COMMIT --> AUDIT[Append-only Audit Log<br/>UPDATE/DELETE revoked<br/>Tamper-evident]
-    
-    AUDIT --> DONE[Draw Complete<br/>Results Immutable]
+
+    COMMIT --> AUDIT[Append-only Audit Log<br/>Triggers block UPDATE/DELETE/TRUNCATE<br/>App role lottery_app: SELECT/INSERT only]
+
+    AUDIT --> DONE[Draw Complete<br/>Append-only and tamper-evident<br/>GET /results re-verifies the digest]
 
     style CRYPTO fill:#FFD700
     style CRYPTO_DETAIL fill:#FF6347,color:#fff

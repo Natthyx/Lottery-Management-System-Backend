@@ -57,6 +57,11 @@ jobs:
         run: go vet ./...
 
       - name: go test
+        # internal/integration runs against the postgres/redis services above
+        # (it is skipped when these are unset, e.g. on a laptop).
+        env:
+          TEST_DATABASE_URL: postgres://lottery:lottery_secret@localhost:5432/lottery_db?sslmode=disable
+          TEST_REDIS_URL: redis://localhost:6379/0
         run: go test ./... -race -count=1
 
       - name: build server

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	mrand "math/rand"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -40,49 +41,70 @@ else
 end`
 
 // Service handles all booking logic. The critical path is BookWithLock —
-// the distributed concurrency control around event capacity.
+// the concurrency control around event capacity.
 type Service struct {
 	db        *pgxpool.Pool
 	redis     *redis.Client
 	lockTTL   time.Duration
+	lockWait  time.Duration
 	releaseSh *redis.Script
+	gates     *eventGates
 }
 
-func NewService(db *pgxpool.Pool, rdb *redis.Client, lockTTL time.Duration) *Service {
+func NewService(db *pgxpool.Pool, rdb *redis.Client, lockTTL, lockWait time.Duration) *Service {
 	if lockTTL <= 0 {
 		lockTTL = 5 * time.Second
+	}
+	if lockWait <= 0 {
+		lockWait = 10 * time.Second
 	}
 	return &Service{
 		db:        db,
 		redis:     rdb,
 		lockTTL:   lockTTL,
+		lockWait:  lockWait,
 		releaseSh: redis.NewScript(luaReleaseLock),
+		gates:     newEventGates(),
 	}
 }
 
-// BookWithLock acquires a Redis distributed lock on the event then runs
-// the booking inside a database transaction. The lock is owner-safe:
-// release is a Lua "compare-and-delete" against a per-request token, so
-// a request whose TTL expired cannot release another request's lock.
+// BookWithLock serialises bookings per event in three layers and then runs
+// the booking transaction:
+//
+//  1. An in-process FIFO gate per event. Concurrent requests for a hot event
+//     queue here in arrival order instead of being rejected, and while they
+//     wait they hold no database connection, so one hot event cannot drain
+//     the pool for everything else.
+//  2. An owner-safe Redis lock, so the single request per replica that got
+//     through its gate does not contend with other replicas on the row.
+//     Acquisition retries with backoff until the wait budget is spent.
+//  3. SELECT ... FOR UPDATE on the event row inside the transaction. This
+//     is what guarantees correctness even if layers 1-2 are bypassed.
+//
+// The whole wait is bounded by lockWait; a request that does not get its
+// turn in time fails with ErrEventBusy (retryable).
 func (s *Service) BookWithLock(ctx context.Context, eventID, userID int64) error {
 	if eventID <= 0 || userID <= 0 {
 		return ErrInvalidInput
 	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, s.lockWait)
+	defer cancel()
+
+	leave, err := s.gates.enter(waitCtx, eventID)
+	if err != nil {
+		return ErrEventBusy
+	}
+	defer leave()
 
 	lockKey := fmt.Sprintf("lock:booking:event:%d", eventID)
 	token, err := newToken()
 	if err != nil {
 		return fmt.Errorf("generating lock token: %w", err)
 	}
-
-	acquired, err := s.redis.SetNX(ctx, lockKey, token, s.lockTTL).Result()
-	if err != nil {
-		return fmt.Errorf("redis lock acquisition failed: %w", err)
+	if err := s.acquireRedisLock(waitCtx, lockKey, token); err != nil {
+		return err
 	}
-	if !acquired {
-		return ErrEventBusy
-	}
-
 	defer func() {
 		// Owner-safe release: only deletes if we still own it.
 		// Use a fresh background context with a short timeout so that
@@ -98,9 +120,40 @@ func (s *Service) BookWithLock(ctx context.Context, eventID, userID int64) error
 	return s.createBooking(ctx, eventID, userID)
 }
 
-// createBooking runs inside the Redis lock. Capacity and status are
-// re-checked under a SELECT ... FOR UPDATE so that concurrent bookings
-// across replicas (or a Redis-lock bypass) cannot oversell the event.
+// acquireRedisLock retries SET NX with jittered exponential backoff until it
+// owns the lock or waitCtx expires. Each SET NX gets its own short timeout
+// rather than waitCtx, so a deadline can never fire after Redis has applied
+// the SET but before we learn we own it (which would orphan the lock until
+// its TTL).
+func (s *Service) acquireRedisLock(waitCtx context.Context, key, token string) error {
+	backoff := 2 * time.Millisecond
+	for {
+		setCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		acquired, err := s.redis.SetNX(setCtx, key, token, s.lockTTL).Result()
+		cancel()
+		if err != nil {
+			return fmt.Errorf("redis lock acquisition failed: %w", err)
+		}
+		if acquired {
+			return nil
+		}
+		t := time.NewTimer(backoff/2 + time.Duration(mrand.Int63n(int64(backoff))))
+		select {
+		case <-waitCtx.Done():
+			t.Stop()
+			return ErrEventBusy
+		case <-t.C:
+		}
+		if backoff < 50*time.Millisecond {
+			backoff *= 2
+		}
+	}
+}
+
+// createBooking runs inside the locks. Duplicate, status and capacity are
+// checked under SELECT ... FOR UPDATE so that concurrent bookings across
+// replicas (or a lock bypass) cannot oversell the event. A duplicate is
+// reported as such even if the event has since filled up or closed.
 func (s *Service) createBooking(ctx context.Context, eventID, userID int64) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -119,6 +172,16 @@ func (s *Service) createBooking(ctx context.Context, eventID, userID int64) erro
 			return ErrEventNotFound
 		}
 		return fmt.Errorf("fetching event: %w", err)
+	}
+
+	var already bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM bookings WHERE event_id = $1 AND user_id = $2)`, eventID, userID,
+	).Scan(&already); err != nil {
+		return fmt.Errorf("checking existing booking: %w", err)
+	}
+	if already {
+		return ErrAlreadyBooked
 	}
 
 	if status != string(models.EventStatusOpen) {

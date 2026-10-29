@@ -286,7 +286,7 @@ Cancel an event (admin only). Can transition from `open` or `closed` to `cancell
 ### Book Event
 **POST** `/events/{eventID}/book`
 
-Register for a lottery event. Uses Redis distributed locking + PostgreSQL row locking for concurrency safety.
+Register for a lottery event. Concurrent requests for the same event wait their turn (per-event FIFO queue → Redis lock → PostgreSQL `SELECT ... FOR UPDATE`) instead of being rejected.
 
 **Auth:** Required (user or admin)
 
@@ -300,15 +300,21 @@ Register for a lottery event. Uses Redis distributed locking + PostgreSQL row lo
 }
 ```
 
-**Errors:**
+**Errors** (envelope carries a machine-readable `code`):
 - `401` Not authenticated
-- `404` Event not found
-- `409` Event busy (retry), event not open, event full, already booked
+- `404` `event_not_found`
+- `409` `already_booked` (reported even if the event has since filled or closed), `event_full`, `event_not_open`
+- `503` `event_busy` with `Retry-After: 1` — the request did not get its turn within `LOCK_WAIT_TIMEOUT` (default 10 s); safe to retry
+
+```json
+{ "success": false, "error": "event is fully booked (100/100)", "code": "event_full" }
+```
 
 **Concurrency Protection:**
-- Redis lock prevents concurrent bookings for the same event
-- PostgreSQL `SELECT FOR UPDATE` ensures capacity isn't exceeded
-- Both layers combined guarantee no overselling
+- In-process FIFO queue per event: contending requests are served in arrival order, holding no DB connection while waiting
+- Owner-safe Redis lock (bounded, backed-off wait) serialises replicas
+- PostgreSQL `SELECT FOR UPDATE` re-checks duplicate, status and capacity under the row lock, so the event is never oversold even if Redis is bypassed
+- Details: [concurrency-protection.md](../explanations/concurrency-protection.md); measurements: [loadtest/REPORT.md](../../loadtest/REPORT.md)
 
 ---
 
@@ -418,28 +424,31 @@ Execute the lottery draw using crypto/rand Fisher-Yates algorithm (admin only).
         "drawn_at": "2024-03-15T15:30:00Z"
       }
     ],
-    "drawn_at": "2024-03-15T15:30:00Z"
+    "drawn_at": "2024-03-15T15:30:00Z",
+    "digest": "a3cd9056400ffbb37430d255141ef55a33476a6db9e2ffa84eb8d6fdac1b9d28",
+    "integrity": "verified"
   }
 }
 ```
 
 **Process:**
 1. Lock event row with `FOR UPDATE`
-2. Validate status is `closed`
+2. Validate status is `closed` and the event's `draw_at` has passed
 3. Fetch all participants
 4. Shuffle using crypto/rand
 5. Split into winners and waitlist
-6. Persist all results to append-only audit table
+6. Persist all results to the append-only audit table and seal them (SHA-256 `digest` over the full ordered outcome, stored in `lottery_draw_seals` and logged)
 7. Update event status to `drawn`
 8. Commit transaction atomically
 
-**Errors:**
-- `404` Event not found
-- `409` Event not closed, already drawn, no participants
+**Errors** (with `code`):
+- `404` `event_not_found`
+- `409` `event_not_closed`, `draw_not_due` (before `draw_at`), `already_drawn`, `event_cancelled`, `no_participants`
 
-**Idempotency:**
-- Cannot draw twice
-- All results recorded in immutable audit log
+**Idempotency and integrity:**
+- Cannot draw twice (concurrent draws serialise on the row lock; exactly one succeeds)
+- Audit rows cannot be updated, deleted or truncated (database triggers for every role; the app's role has no such privileges)
+- Keep the returned `digest`: it lets anyone re-verify the published result later
 
 ---
 
@@ -458,10 +467,16 @@ Retrieve lottery results (public, no auth required).
     "total_entrants": 47,
     "winners": [...],
     "waitlist": [...],
-    "drawn_at": "2024-03-15T15:30:00Z"
+    "drawn_at": "2024-03-15T15:30:00Z",
+    "digest": "a3cd9056…",
+    "integrity": "verified"
   }
 }
 ```
+
+`integrity` is recomputed on every call: `verified` if the stored rows still hash to the seal recorded at draw time,
+`mismatch` if they were altered (e.g. by a database superuser bypassing the triggers; the app also logs an error),
+`unsealed` for draws made before seals existed.
 
 **Errors:**
 - `404` No results available (event not drawn yet)
@@ -518,7 +533,7 @@ Liveness probe. Returns 200 if the process is running. Does not check dependenci
 ### Readiness Check
 **GET** `/ready`
 
-Readiness probe. Verifies PostgreSQL and Redis connectivity.
+Readiness probe. Verifies PostgreSQL and Redis connectivity. Not rate limited (neither is `/health`).
 
 **Response:** `200 OK`
 ```json
@@ -548,11 +563,16 @@ Readiness probe. Verifies PostgreSQL and Redis connectivity.
 
 **Auth endpoints** (`/auth/login`, `/auth/register`):
 - 10 requests per minute per IP (configurable)
+- `/auth/login` additionally: 10 attempts per 15 minutes per account (email), whatever the IP
 - 429 Too Many Requests on violation
 
-**All other endpoints:**
+**All other endpoints** (except `/health` and `/ready`, which are not limited):
 - 100 requests per minute per IP (configurable)
 - 429 Too Many Requests on violation
+
+The client IP is the TCP peer. `X-Forwarded-For` / `X-Real-IP` are honoured only when the peer is listed in
+`TRUSTED_PROXIES`; otherwise they are ignored, so a client cannot choose its own rate-limit key.
+Counters are in memory per replica.
 
 ---
 

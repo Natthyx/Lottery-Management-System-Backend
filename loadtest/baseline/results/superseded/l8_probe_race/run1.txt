@@ -1,0 +1,17 @@
+## A. general API limit: 120 sequential GET /events from one IP
+  22 000
+  98 200
+first_429_at_request=
+## A2. one more GET /events, headers
+HTTP/1.1 200 OK
+X-Ratelimit-Limit: 100
+X-Ratelimit-Remaining: 2
+X-Ratelimit-Reset: 1793297460
+## A3. same request with a spoofed X-Forwarded-For (RealIP middleware runs before the limiter)
+   3 200
+## B. auth limit: 15 sequential POST /auth/login with body {} (401 without running bcrypt)
+  10 401
+   5 429
+first_429_at_request=11
+## B2. same with a spoofed X-Real-IP
+   3 401

@@ -48,16 +48,23 @@ func TestFairShuffle_DoesNotMutateInput(t *testing.T) {
 	}
 }
 
-// TestFairShuffle_UniformDistribution runs 10,000 shuffles of 5 elements
+// TestFairShuffle_UniformDistribution runs 100,000 shuffles of 5 elements
 // and verifies each element appears in each position roughly 20% of the time.
 // A biased PRNG would show one position appearing significantly more.
 func TestFairShuffle_UniformDistribution(t *testing.T) {
+	// Each cell count is Binomial(trials, 1/n). The bound is 5 standard
+	// deviations (about 3.2% of the expected count here), so a fair shuffle
+	// fails this test with probability about 25 cells x 5.7e-7, i.e. roughly
+	// once in 70,000 runs, while any per-cell bias above ~3% is still caught.
+	// (A fixed 5% bound with 10,000 trials was only 2.5 sigma and failed
+	// about one run in four on a fair shuffle.)
 	const (
-		n         = 5
-		trials    = 10_000
-		expected  = float64(trials) / float64(n) // 2000 per position
-		tolerance = 0.05                         // 5% deviation allowed
+		n        = 5
+		trials   = 100_000
+		expected = float64(trials) / float64(n) // 20000 per position
 	)
+	sigma := math.Sqrt(float64(trials) * (1.0 / n) * (1 - 1.0/n))
+	tolerance := 5 * sigma / expected
 
 	counts := make([][]int, n)
 	for i := range counts {

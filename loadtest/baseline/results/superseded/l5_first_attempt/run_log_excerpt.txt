@@ -1,0 +1,4 @@
+[20:52:33] === l6 ===
+[20:52:35] === l5 ===
+fairness-api: close: 0 Put "http://127.0.0.1:18080/events/536/close": EOF
+exit status 1

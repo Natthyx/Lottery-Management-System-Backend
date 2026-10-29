@@ -1,0 +1,31 @@
+testRunDurationMs=60003.6
+data_received: count=5202637000 rate=86705414.342
+data_received{ep:get}: count=18082161 rate=301351.269
+data_received{ep:list}: count=151438410 rate=2523822.071
+data_received{ep:results}: count=5033116429 rate=83880241.002
+data_sent: count=7278746 rate=121305.155
+dropped_iterations: count=137 rate=2.283
+http_req_blocked: max=6.529 count=89866 min=0 med=0.003 avg=0.004 p(90)=0.004 p(95)=0.005 p(99)=0.015
+http_req_connecting: avg=0.001 p(90)=0 p(95)=0 p(99)=0 max=6.507 count=89866 min=0 med=0
+http_req_duration: count=89866 min=0.406 med=2.417 avg=7.575 p(90)=11.381 p(95)=25.537 p(99)=113.332 max=416.482
+http_req_duration{ep:get}: p(99)=54.776 max=361.761 count=29987 min=0.406 med=1.598 avg=4.504 p(90)=8.594 p(95)=17.042
+http_req_duration{ep:list}: min=0.616 med=2.01 avg=5.45 p(90)=9.774 p(95)=19.469 p(99)=65.79 max=368.977 count=29970
+http_req_duration{ep:results}: med=3.899 avg=12.785 p(90)=18.872 p(95)=55.866 p(99)=208.642 max=416.482 count=29909 min=1.65
+http_req_duration{expected_response:true}: avg=7.575 p(90)=11.381 p(95)=25.537 p(99)=113.332 max=416.482 count=89866 min=0.406 med=2.417
+http_req_failed: rate=0 passes=0 fails=89866
+http_req_failed{ep:get}: rate=0 passes=0 fails=29987
+http_req_failed{ep:list}: rate=0 passes=0 fails=29970
+http_req_failed{ep:results}: rate=0 passes=0 fails=29909
+http_req_receiving: p(99)=58.925 max=278.449 count=89866 min=0.006 med=0.033 avg=1.922 p(90)=0.958 p(95)=2.588
+http_req_sending: med=0.007 avg=0.01 p(90)=0.011 p(95)=0.014 p(99)=0.035 max=13.816 count=89866 min=0.001
+http_req_tls_handshaking: med=0 avg=0 p(90)=0 p(95)=0 p(99)=0 max=0 count=89866 min=0
+http_req_waiting: med=2.17 avg=5.644 p(90)=10.119 p(95)=19.453 p(99)=63.456 max=379.414 count=89866 min=0.377
+http_reqs: count=89866 rate=1497.677
+http_reqs{ep:get}: count=29987 rate=499.753
+http_reqs{ep:list}: count=29970 rate=499.47
+http_reqs{ep:results}: count=29909 rate=498.453
+iteration_duration: count=89866 min=0.462 med=2.485 avg=7.646 p(90)=11.459 p(95)=25.602 p(99)=113.543 max=417.29
+iterations: count=89866 rate=1497.677
+st_2xx: count=89866 rate=1497.677
+vus: value=8 min=1 max=128
+vus_max: value=251 min=150 max=251

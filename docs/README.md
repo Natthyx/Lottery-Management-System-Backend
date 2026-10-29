@@ -23,9 +23,9 @@ docs/
 │
 ├── diagrams/
 │   ├── lottery-workflow.mmd            ← Complete workflow sequence
-│   ├── concurrency-protection.mmd      ← Dual-layer locking
+│   ├── concurrency-protection.mmd      ← FIFO queue + Redis lock + row lock
 │   ├── winner-selection.mmd            ← Crypto/rand Fisher-Yates
-│   ├── audit-trail.mmd                 ← Immutable audit log
+│   ├── audit-trail.mmd                 ← Append-only, tamper-evident audit log
 │   └── deployment-architecture.mmd     ← Docker + Kubernetes
 │
 ├── explanations/
@@ -141,7 +141,7 @@ Before uploading to portfolio:
 **Recommended topics:**
 1. "Building Fair Lotteries: crypto/rand vs math/rand"
 2. "Defense-in-Depth Concurrency Control"
-3. "Immutable Audit Trails with PostgreSQL Permissions"
+3. "Tamper-Evident Audit Trails in PostgreSQL: Triggers, Least-Privilege Roles and Hash Seals"
 
 See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) for detailed content strategies.
 
@@ -171,7 +171,9 @@ This documentation supports multiple audiences:
 
 ❌ Don't claim payment integration (not implemented)  
 ❌ Don't claim webhook handling (not implemented)  
-❌ Don't claim specific performance numbers (no load tests)
+❌ Don't claim performance numbers beyond the measured results in [`../loadtest/REPORT.md`](../loadtest/REPORT.md) (local, single machine)  
+❌ Don't call the audit trail "immutable" or "impossible to tamper with" — it is append-only and tamper-evident (a DB superuser can still disable triggers; the draw seal detects it)  
+❌ Don't claim bookings stay available if Redis fails — they fail closed (never oversell, but return 500)
 
 See [`portfolio/claim-verification.md`](portfolio/claim-verification.md) for complete list.
 

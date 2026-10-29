@@ -1,0 +1,4 @@
+{
+  "description": "L4 concurrent draws: event with 1000 bookings, capacity 1000, winner_count 100, closed; 20 simultaneous POST /draw (per-vu-iterations, 20 VUs x 1).",
+  "stage_seconds": 0
+}

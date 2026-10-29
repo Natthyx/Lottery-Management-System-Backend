@@ -2,30 +2,34 @@ graph TB
     subgraph "Lottery Draw Operation"
         DRAW_START[Admin triggers lottery draw]
         DRAW_TX[BEGIN TRANSACTION]
-        DRAW_LOCK[FOR UPDATE lock on event]
+        DRAW_LOCK[FOR UPDATE lock on event<br/>status='closed' and draw_at reached]
         DRAW_ALGO[crypto/rand Fisher-Yates]
     end
 
     subgraph "Audit Log Creation"
         INSERT_W[INSERT lottery_draws<br/>winner records<br/>draw_rank 1..N]
         INSERT_WL[INSERT lottery_draws<br/>waitlist records<br/>draw_rank N+1..M]
+        SEAL[INSERT lottery_draw_seals<br/>SHA-256 digest over the<br/>full ordered outcome]
         COMMIT[COMMIT TRANSACTION<br/>Atomically persisted]
+        PUBLISH[Digest returned by POST /draw<br/>and logged at warn level<br/>off-database copy]
     end
 
-    subgraph "Database-Level Protection"
-        SCHEMA[lottery_draws table schema]
-        REVOKE[REVOKE UPDATE, DELETE<br/>ON lottery_draws<br/>FROM PUBLIC]
-        IMMUTABLE[Attempts to UPDATE/DELETE<br/>raise permission error]
+    subgraph "Database-Level Protection (migration 002)"
+        SCHEMA[lottery_draws + lottery_draw_seals]
+        TRIGGERS[Triggers BEFORE UPDATE/DELETE<br/>and BEFORE TRUNCATE<br/>raise an error for every role,<br/>including owner and superuser]
+        APP_ROLE[App connects as lottery_app:<br/>SELECT/INSERT only on audit tables,<br/>owns nothing, cannot disable<br/>or drop the triggers]
+        FINAL[trg_events_drawn_is_final:<br/>status, winner_count, capacity<br/>of a drawn event are frozen]
     end
 
     subgraph "Audit Record Contents"
         FIELDS["• id (serial)<br/>• event_id<br/>• winner_user_id<br/>• draw_rank (1..N)<br/>• total_entrants<br/>• entropy_source<br/>• drawn_at (timestamp)"]
     end
 
-    subgraph "Tamper Evidence"
+    subgraph "Append-only and Tamper-evident"
         READ_ONLY[Records are append-only]
-        NO_MODIFY[Cannot change past draws]
-        NO_DELETE[Cannot erase draw history]
+        NO_MODIFY[Application role cannot<br/>change or erase past draws]
+        VERIFY[GET /results recomputes the digest<br/>integrity: verified / mismatch]
+        RESIDUAL[Residual risk: owner/superuser<br/>credentials can still disable triggers<br/>or use session_replication_role=replica<br/>— not prevented, but detected by the seal]
         FORENSIC[Full audit trail for compliance]
     end
 
@@ -34,21 +38,29 @@ graph TB
     DRAW_LOCK --> DRAW_ALGO
     DRAW_ALGO --> INSERT_W
     DRAW_ALGO --> INSERT_WL
-    INSERT_W --> COMMIT
-    INSERT_WL --> COMMIT
+    INSERT_W --> SEAL
+    INSERT_WL --> SEAL
+    SEAL --> COMMIT
+    COMMIT --> PUBLISH
 
     COMMIT --> SCHEMA
-    SCHEMA --> REVOKE
-    REVOKE --> IMMUTABLE
+    SCHEMA --> TRIGGERS
+    SCHEMA --> APP_ROLE
+    SCHEMA --> FINAL
 
     SCHEMA --> FIELDS
     FIELDS --> READ_ONLY
+    TRIGGERS --> READ_ONLY
+    APP_ROLE --> NO_MODIFY
     READ_ONLY --> NO_MODIFY
-    NO_MODIFY --> NO_DELETE
-    NO_DELETE --> FORENSIC
+    NO_MODIFY --> VERIFY
+    RESIDUAL -.->|detected by| VERIFY
+    VERIFY --> FORENSIC
 
-    style REVOKE fill:#FF6347,color:#fff
-    style IMMUTABLE fill:#FFD700
+    style TRIGGERS fill:#FF6347,color:#fff
+    style APP_ROLE fill:#FFD700
+    style SEAL fill:#FFD700
     style COMMIT fill:#90EE90
     style FORENSIC fill:#87CEEB
     style READ_ONLY fill:#DDA0DD
+    style RESIDUAL fill:#FFB6C1

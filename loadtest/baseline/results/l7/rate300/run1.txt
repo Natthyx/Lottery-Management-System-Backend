@@ -1,0 +1,31 @@
+testRunDurationMs=60003.676
+data_received: count=1035232018 rate=17252809.945
+data_received{ep:get}: rate=49196.986 count=2952000
+data_received{ep:list}: count=29692948 rate=494852.149
+data_received{ep:results}: count=1002587070 rate=16708760.81
+data_sent: count=1458164 rate=24301.244
+dropped_iterations: count=0 rate=0
+http_req_blocked: count=18002 min=0 med=0.005 avg=0.009 p(90)=0.008 p(95)=0.011 p(99)=0.125 max=1.076
+http_req_connecting: p(99)=0 max=0.388 count=18002 min=0 med=0 avg=0.002 p(90)=0 p(95)=0
+http_req_duration: min=0.452 med=2.209 avg=2.811 p(90)=4.377 p(95)=6.246 p(99)=18.292 max=113.899 count=18002
+http_req_duration{ep:get}: count=6000 min=0.452 med=0.987 avg=1.622 p(90)=2.229 p(95)=3.234 p(99)=14.409 max=72.36
+http_req_duration{ep:list}: min=0.869 med=2.136 avg=2.778 p(90)=3.803 p(95)=5.411 p(99)=17.443 max=73.926 count=6001
+http_req_duration{ep:results}: p(90)=5.647 p(95)=8.456 p(99)=24.792 max=113.899 count=6001 min=1.565 med=2.932 avg=4.032
+http_req_duration{expected_response:true}: p(95)=6.246 p(99)=18.292 max=113.899 count=18002 min=0.452 med=2.209 avg=2.811 p(90)=4.377
+http_req_failed: fails=18002 rate=0 passes=0
+http_req_failed{ep:get}: passes=0 fails=6000 rate=0
+http_req_failed{ep:list}: rate=0 passes=0 fails=6001
+http_req_failed{ep:results}: rate=0 passes=0 fails=6001
+http_req_receiving: med=0.035 avg=0.284 p(90)=0.514 p(95)=0.785 p(99)=4.094 max=40.724 count=18002 min=0.006
+http_req_sending: max=13.076 count=18002 min=0.002 med=0.014 avg=0.019 p(90)=0.024 p(95)=0.033 p(99)=0.089
+http_req_tls_handshaking: min=0 med=0 avg=0 p(90)=0 p(95)=0 p(99)=0 max=0 count=18002
+http_req_waiting: p(99)=17.132 max=102.872 count=18002 min=0.44 med=1.996 avg=2.509 p(90)=3.764 p(95)=5.061
+http_reqs: count=18002 rate=300.015
+http_reqs{ep:get}: count=6000 rate=99.994
+http_reqs{ep:list}: count=6001 rate=100.011
+http_reqs{ep:results}: count=6001 rate=100.011
+iteration_duration: p(99)=19.2 max=114.013 count=18002 min=0.475 med=2.327 avg=2.946 p(90)=4.518 p(95)=6.433
+iterations: rate=300.015 count=18002
+st_2xx: rate=300.015 count=18002
+vus: value=1 min=0 max=10
+vus_max: value=150 min=150 max=150

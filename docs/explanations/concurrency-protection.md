@@ -2,202 +2,133 @@
 
 ## Overview
 
-The lottery system implements **defense-in-depth concurrency control** using both Redis distributed locking and PostgreSQL row-level locking. This dual-layer approach prevents race conditions and overselling in high-traffic scenarios.
+Booking an event goes through three layers, each with one job:
 
-## Why Two Layers?
+| layer | where | job |
+|---|---|---|
+| 1. per-event FIFO queue | in-process, `internal/booking/gate.go` | make contending requests **wait their turn in arrival order** instead of failing, without holding a DB connection |
+| 2. Redis lock | `internal/booking/service.go` | serialise the one request per replica that got through its queue against the other replicas |
+| 3. `SELECT ... FOR UPDATE` | the booking transaction | **guarantee correctness**: no oversell and no duplicates, even if layers 1–2 are bypassed or Redis misbehaves |
 
-### Problem Statement
+Measured behaviour (local, single machine) is in [loadtest/REPORT.md](../../loadtest/REPORT.md). How the design got here is in
+[loadtest/baseline/FINDINGS.md](../../loadtest/baseline/FINDINGS.md): the previous design was a try-once Redis lock, which
+rejected most simultaneous requests for a hot event with `409 event is busy` and could starve retrying clients indefinitely.
 
-When multiple users simultaneously book the last available slot in an event:
-- Without protection: all requests read "9/10 booked", all believe they can book, all insert → **oversold to 12/10**
-- With single-layer protection: edge cases remain depending on the protection mechanism
+## Problem Statement
 
-### Layer 1: Redis Distributed Lock
+When many users book the same event at once:
+- Without protection, every request reads "9/10 booked", believes it can book, and inserts, so the event is **oversold**.
+- With a try-once lock, nothing is oversold, but most requests are refused even though seats are free, and successful bookings per second *fall* as more clients compete.
 
-**Purpose:** Serialize access to the booking logic across all API replicas.
+## Layer 1: In-process FIFO queue per event
 
-**Implementation:**
 ```go
-// booking/service.go lines 62-70
-acquired, err := s.redis.SetNX(ctx, lockKey, token, s.lockTTL).Result()
-if !acquired {
-    return ErrEventBusy
+// internal/booking/gate.go:29-49
+select {
+case gt.slot <- struct{}{}:   // got the event's single slot
+    return leave, nil
+case <-ctx.Done():            // LOCK_WAIT_TIMEOUT elapsed
+    return nil, ctx.Err()
 }
 ```
 
-**Key:** `lock:booking:event:{event_id}`
-**Value:** Random hex token (16 bytes from `crypto/rand`)
-**TTL:** 5 seconds (configurable)
+Each event has a channel with capacity 1. Entering sends into it; leaving receives. Go queues blocked senders in arrival
+order and hands the slot to the oldest one, so waiters are served first-come first-served and none can be starved by later
+arrivals (unit test: `TestEventGates_ServesWaitersInArrivalOrder`). While waiting, a request holds no database connection, so
+one hot event cannot drain the pool that every other endpoint needs. Idle gates are removed.
 
-**What it protects against:**
-- Multiple replicas processing the same event simultaneously
-- Request storms from load balancers distributing traffic
+## Layer 2: Owner-safe Redis lock with a bounded wait
 
-**What it does NOT protect against:**
-- Redis failure (lock disappears, multiple replicas proceed)
-- Lock expiry before transaction completes (another request acquires lock while first is mid-transaction)
-- Direct database access bypassing the API
+**Key:** `lock:booking:event:{event_id}` · **Value:** random 16-byte token · **TTL:** `LOCK_TTL` (5 s)
 
-### Layer 2: PostgreSQL Row Lock (SELECT FOR UPDATE)
-
-**Purpose:** Ensure atomicity at the database level, regardless of Redis state.
-
-**Implementation:**
 ```go
-// booking/service.go lines 87-92
-err = tx.QueryRow(ctx,
-    `SELECT status, capacity FROM events WHERE id = $1 FOR UPDATE`,
-    eventID,
-).Scan(&status, &capacity)
+// internal/booking/service.go:128-150 (abridged)
+for {
+    acquired, err := s.redis.SetNX(setCtx, key, token, s.lockTTL).Result()
+    if acquired { return nil }
+    // jittered backoff 2 ms → 50 ms, until LOCK_WAIT_TIMEOUT
+}
 ```
 
-**What it protects against:**
-- Redis lock expiry during a long transaction
-- Redis unavailability
-- Concurrent writes from background jobs, admin tools, or direct SQL access
-- Serialization failures in high-contention scenarios
+Because layer 1 already serialises requests within a replica, only one request per replica per event ever polls Redis. Each
+`SET NX` uses its own short timeout instead of the request's wait deadline, so a deadline can never fire after Redis applied
+the `SET` but before the app learns it owns the lock, which would orphan the lock until its TTL.
 
-**How it works:**
-- `FOR UPDATE` acquires an exclusive row lock on the event record
-- All other transactions attempting to read the same row block until the lock holder commits or rolls back
-- PostgreSQL guarantees that only one transaction at a time can hold the lock
-- Lock is automatically released on COMMIT or ROLLBACK
+Release is owner-safe: a Lua compare-and-delete (`service.go:36-41`, run at `:115`) only deletes the key if it still holds this
+request's token, so a request whose TTL expired cannot release someone else's lock.
 
-### Combined Defense
+## Layer 3: PostgreSQL row lock (correctness)
 
-```
-Request A                              Request B
-    │                                      │
-    ▼                                      ▼
-Redis SETNX ✓ (acquired)            Redis SETNX ✗ (key exists)
-    │                                      │
-    ▼                                      └──> 409 Conflict (ErrEventBusy)
-BEGIN TX                                        │
-    │                                           ▼
-SELECT ... FOR UPDATE (row lock)          (waits for A to finish)
-    │
-Check capacity (9/10)
-    │
-INSERT booking (10/10)
-    │
-COMMIT (releases row lock)
-    │
-Lua script release Redis lock
-    │
-    ▼
-Request B retries
-    │
-    ▼
-Redis SETNX ✓ (acquired)
-    │
-    ▼
-BEGIN TX
-    │
-SELECT ... FOR UPDATE ✓ (row lock acquired)
-    │
-Check capacity (10/10) ← sees A's committed booking
-    │
-    └──> 409 Conflict (ErrEventFull)
+```go
+// internal/booking/service.go:157-215
+SELECT status, capacity FROM events WHERE id = $1 FOR UPDATE   -- row lock
+SELECT EXISTS(SELECT 1 FROM bookings WHERE event_id = $1 AND user_id = $2)  -- duplicate?
+-- status must be 'open'; COUNT(*) < capacity
+INSERT INTO bookings (event_id, user_id) VALUES ($1, $2)       -- UNIQUE(event_id, user_id) backstop
+COMMIT
 ```
 
-## Owner-Safe Lock Release
+The row lock serialises every transaction that books this event, from any replica, whatever happened in Redis. A duplicate
+is checked first, so a repeated request is reported as `already_booked` even if the event has since filled or closed.
 
-**Problem:** If Request A's Redis lock expires after 5 seconds but before it completes, Request B might acquire the lock. When A finally finishes, it shouldn't delete B's lock.
+## Outcomes and status codes
 
-**Solution:** Token-based ownership enforced by a Lua script:
+| outcome | status | `code` |
+|---|---|---|
+| booked | 201 | – |
+| already booked by this user | 409 | `already_booked` |
+| event full | 409 | `event_full` |
+| event not open | 409 | `event_not_open` |
+| did not get a turn within `LOCK_WAIT_TIMEOUT` (default 10 s) | **503** + `Retry-After: 1` | `event_busy` (retryable) |
+| Redis or Postgres unreachable | 500 | `internal` |
 
-```lua
--- booking/service.go lines 35-41
-if redis.call("GET", KEYS[1]) == ARGV[1] then
-    return redis.call("DEL", KEYS[1])
-else
-    return 0
-end
+## Timeline: two requests for the last seat
+
+```
+Request A                                   Request B (same replica)
+    │                                           │
+enter queue ✓ (slot free)                   enter queue … waits (FIFO)
+Redis SET NX ✓                                  │
+BEGIN; SELECT … FOR UPDATE ✓                    │
+not a duplicate; open; 9/10 → INSERT            │
+COMMIT; release Redis lock; leave queue ──────▶ gets the slot
+                                            Redis SET NX ✓
+                                            BEGIN; SELECT … FOR UPDATE ✓
+                                            10/10 → 409 event_full
 ```
 
-This is executed atomically on the Redis server, ensuring:
-1. Check current lock value
-2. Delete only if it matches our token
-3. Steps 1-2 are indivisible (no race condition)
+A request on another replica would wait at layer 2 (backoff) or, if Redis were bypassed, at layer 3 (row lock). In every case
+the capacity check runs under the row lock against committed data.
 
-## Transaction Isolation
+## Failure modes
 
-PostgreSQL transaction uses default isolation level `READ COMMITTED`:
-- Each statement sees a consistent snapshot
-- `FOR UPDATE` prevents concurrent modifications
-- No phantom reads within the transaction
+- **Redis down:** acquiring the lock fails and bookings return 500. This fails closed: it is correct, but bookings are unavailable until Redis returns. (Not load-tested.)
+- **Lock TTL expires mid-transaction:** another replica may enter layer 3, but it blocks on the row lock and re-checks capacity afterwards. No oversell.
+- **PostgreSQL down:** bookings fail; there is no fallback (correctness over availability).
+- **A replica crashes while holding the Redis lock:** other replicas wait until the TTL (5 s) expires. Requests waiting longer than `LOCK_WAIT_TIMEOUT` get `503 event_busy`.
 
-## Performance Characteristics
+## Performance characteristics
 
-**Throughput:**
-- Redis lock serializes requests per event
-- Different events can be booked concurrently (lock granularity is per event, not global)
-- Lock TTL of 5s means max 1 booking per event per 5s under contention (in practice, much faster)
+All of one event's bookings pass through one short critical section, so per-event throughput is bounded by that section's
+latency, and **waiting time grows linearly with the number of concurrent requests for the same event**. Different events
+do not share a queue or a lock. Numbers measured on a laptop are in [loadtest/REPORT.md](../../loadtest/REPORT.md); they
+are not production capacity figures.
 
-**Latency:**
-- Redis SETNX: ~1-2ms (local network)
-- PostgreSQL SELECT FOR UPDATE: ~5-10ms (depending on contention)
-- Total booking operation: ~20-50ms without contention
+## Code references
 
-**Failure Modes:**
-- Redis down: bookings fail fast with connection error
-- PostgreSQL down: bookings fail (no fallback, correctness over availability)
-- Lock TTL expires: subsequent requests re-validate capacity in PostgreSQL (no overselling)
-
-## Why This Matters
-
-Without this dual-layer approach:
-
-**Redis-only:**
-- Redis failure → overselling
-- Lock expiry → overselling
-- Direct DB access → overselling
-
-**PostgreSQL-only:**
-- Works correctly but contention on popular events causes serialization failures and high retry rates
-- Redis layer reduces database contention by serializing before hitting the database
-
-**Dual-layer:**
-- Redis reduces database load
-- PostgreSQL guarantees correctness
-- System remains correct even if Redis fails
-- No silent failures
-
-## Real-World Scenario
-
-**High-demand event (capacity=100, 200 concurrent requests):**
-
-1. Redis serializes requests: only 1 proceeds at a time per event
-2. That request acquires row lock in PostgreSQL
-3. Validates capacity, inserts booking, commits
-4. Releases Redis lock
-5. Next request proceeds
-
-**If Redis fails mid-booking:**
-
-1. Request A acquired Redis lock, started PostgreSQL transaction
-2. Redis crashes
-3. Request B (no Redis) starts a new PostgreSQL transaction
-4. Request B blocks on `SELECT FOR UPDATE` because A holds the row lock
-5. Request A commits, releases row lock
-6. Request B's transaction sees A's booking, rejects duplicate/full capacity
-
-**Result:** Correctness maintained regardless of Redis state.
-
-## Code References
-
-| Component | File | Lines |
-|-----------|------|-------|
-| Redis lock acquisition | `internal/booking/service.go` | 62-70 |
-| Owner-safe release script | `internal/booking/service.go` | 35-41 |
-| Lua script execution | `internal/booking/service.go` | 118-123 |
-| PostgreSQL FOR UPDATE | `internal/booking/service.go` | 87-92 |
-| Transaction begin/commit | `internal/booking/service.go` | 80, 114 |
-| Lock token generation | `internal/booking/service.go` | 146-152 |
+| component | file | lines |
+|---|---|---|
+| FIFO gate | `internal/booking/gate.go` | 29-49 |
+| `BookWithLock` (three layers) | `internal/booking/service.go` | 86-121 |
+| Redis acquire with backoff | `internal/booking/service.go` | 128-150 |
+| Owner-safe release script | `internal/booking/service.go` | 36-41, 115 |
+| Transaction (`FOR UPDATE`, duplicate, capacity, insert) | `internal/booking/service.go` | 157-215 |
+| Status codes | `internal/booking/handler.go` | 37-58 |
 
 ## Testing
 
-This concurrency mechanism is validated in production by:
-1. Unit tests with race detector (`go test -race`)
-2. Smoke tests simulating duplicate bookings
-3. Load tests (not included in repository)
+- Unit tests (`-race`): FIFO ordering, timeout and cleanup of the gate (`internal/booking/gate_test.go`).
+- Integration tests against real Postgres and Redis (run in CI): 300 concurrent bookings for 150 seats give exactly 150 bookings and
+  150 `event_full`, with no busy responses; 10 parallel duplicates give exactly one booking; a held lock produces `event_busy` only after the
+  wait budget (`internal/integration/integration_test.go`).
+- Load tests with k6 and SQL invariant checks: `loadtest/`.

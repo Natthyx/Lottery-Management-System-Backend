@@ -73,7 +73,10 @@ echo "$RESP" | jq .
 ok "me works"
 
 step "7. Create an event (admin)"
-DRAW_AT=$(python3 -c "from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+# Draws are refused until draw_at has passed, so schedule it a few seconds out.
+DRAW_DELAY="${DRAW_DELAY:-8}"
+DRAW_AT_EPOCH=$(( $(date +%s) + DRAW_DELAY ))
+DRAW_AT=$(python3 -c "from datetime import datetime,timezone; print(datetime.fromtimestamp($DRAW_AT_EPOCH, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))")
 RESP=$(call POST /events "$ADMIN_TOKEN" "{\"title\":\"Smoke Event $TS\",\"description\":\"For testing\",\"capacity\":10,\"draw_at\":\"$DRAW_AT\",\"winner_count\":1}")
 echo "$RESP" | jq .
 EVENT_ID=$(jget "$RESP" '.data.id')
@@ -118,6 +121,15 @@ RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
 echo "$RESP" | jq .
 [[ "$(jget "$RESP" '.success')" == "false" ]] || err "post-close booking should fail"
 ok "post-close booking rejected"
+
+step "15a. Drawing before draw_at is rejected"
+if (( $(date +%s) < DRAW_AT_EPOCH )); then
+  RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
+  echo "$RESP" | jq .
+  [[ "$(jget "$RESP" '.code')" == "draw_not_due" ]] || err "early draw should be refused"
+  ok "early draw refused"
+fi
+while (( $(date +%s) <= DRAW_AT_EPOCH )); do sleep 1; done
 
 step "15. Draw the lottery"
 RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")

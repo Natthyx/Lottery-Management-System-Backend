@@ -1,0 +1,7 @@
+source=algorithm (internal/lottery.SelectWinners) participants=10 winners_per_draw=5 draws=5000
+win frequency, textbook Pearson: chi2=4.5496 df=9 p=0.8717 expected_per_cell=2500.0 observed=[2476 2510 2480 2438 2500 2535 2546 2540 2463 2512]
+  note: assumes multinomial cells; conservative here because each draw picks distinct winners
+win frequency, variance-adjusted: chi2=8.1893 df=9 p=0.5152 expected_per_cell=2500.0 observed=[2476 2510 2480 2438 2500 2535 2546 2540 2463 2512]
+  note: divides by the exact null variance of a uniform k-subset draw; asymptotically chi2(k-1)
+rank-1 frequency: chi2=6.3160 df=9 p=0.7079 expected_per_cell=500.0 observed=[487 521 499 523 497 504 508 508 457 496]
+  note: one count per draw; multinomial assumption holds

@@ -6,10 +6,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-lottery}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lottery_secret}
       POSTGRES_DB: ${POSTGRES_DB:-lottery_db}
+      # Password of the least-privilege runtime role "lottery_app", created
+      # by deploy/postgres/initdb on first start of a fresh volume.
+      APP_DB_PASSWORD: "${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}"
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Bound to localhost: the database is never exposed on the network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lottery} -d ${POSTGRES_DB:-lottery_db}"]
       interval: 5s
@@ -20,7 +25,9 @@ services:
     image: redis:7-alpine
     container_name: lottery_redis
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # Bound to localhost: Redis has no password here, so it must not be
+      # reachable from the network.
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     command: redis-server --save 60 1 --loglevel warning
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -37,7 +44,12 @@ services:
       PRETTY: "${PRETTY:-false}"
       ENV: "${ENV:-production}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
-      DATABASE_URL: "postgres://${POSTGRES_USER:-lottery}:${POSTGRES_PASSWORD:-lottery_secret}@postgres:5432/${POSTGRES_DB:-lottery_db}?sslmode=disable"
+      # Runtime connection: least-privilege role, owns nothing, cannot
+      # modify the audit tables. Migrations run as the schema owner.
+      DATABASE_URL: "postgres://lottery_app:${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-lottery_db}?sslmode=disable"
+      MIGRATION_DATABASE_URL: "postgres://${POSTGRES_USER:-lottery}:${POSTGRES_PASSWORD:-lottery_secret}@postgres:5432/${POSTGRES_DB:-lottery_db}?sslmode=disable"
+      DB_MAX_CONNS: "${DB_MAX_CONNS:-25}"
+      DB_MIN_CONNS: "${DB_MIN_CONNS:-5}"
       REDIS_URL: "redis://redis:6379/0"
       # Required. No default — fail loudly if not supplied.
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required}"
@@ -46,7 +58,16 @@ services:
       MIGRATE_ON_START: "${MIGRATE_ON_START:-true}"
       CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-}"
       AUTH_RATE_LIMIT_REQUESTS: "${AUTH_RATE_LIMIT_REQUESTS:-10}"
+      AUTH_RATE_LIMIT_WINDOW: "${AUTH_RATE_LIMIT_WINDOW:-1m}"
+      AUTH_ACCOUNT_RATE_LIMIT_REQUESTS: "${AUTH_ACCOUNT_RATE_LIMIT_REQUESTS:-10}"
+      AUTH_ACCOUNT_RATE_LIMIT_WINDOW: "${AUTH_ACCOUNT_RATE_LIMIT_WINDOW:-15m}"
       API_RATE_LIMIT_REQUESTS: "${API_RATE_LIMIT_REQUESTS:-100}"
+      API_RATE_LIMIT_WINDOW: "${API_RATE_LIMIT_WINDOW:-1m}"
+      # CSV of proxy IPs/CIDRs allowed to set X-Forwarded-For. Empty = none.
+      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"
+      LOCK_TTL: "${LOCK_TTL:-5s}"
+      LOCK_WAIT_TIMEOUT: "${LOCK_WAIT_TIMEOUT:-10s}"
+      MAX_WINNERS: "${MAX_WINNERS:-100}"
       BOOTSTRAP_ADMIN_EMAIL: "${BOOTSTRAP_ADMIN_EMAIL:-}"
       BOOTSTRAP_ADMIN_PASSWORD: "${BOOTSTRAP_ADMIN_PASSWORD:-}"
       BOOTSTRAP_ADMIN_NAME: "${BOOTSTRAP_ADMIN_NAME:-System Admin}"

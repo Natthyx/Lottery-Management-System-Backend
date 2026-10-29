@@ -24,6 +24,15 @@ func Respond(w http.ResponseWriter, status int, success bool, data interface{}, 
 	}
 }
 
+// Error writes a failure envelope with a machine-readable code.
+func Error(w http.ResponseWriter, status int, code, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: msg, Code: code}); err != nil {
+		log.Warn().Err(err).Msg("writing JSON response")
+	}
+}
+
 // RespondMeta is the list variant carrying pagination metadata.
 func RespondMeta(w http.ResponseWriter, status int, data interface{}, meta *models.Meta) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

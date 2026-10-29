@@ -1,0 +1,430 @@
+## date
+2026-10-29T19:11:12Z
+## git
+6ee3b75ed5284f12d62848c4efb5f17b07fa4653
+RM loadtest/FINDINGS.md -> loadtest/baseline/FINDINGS.md
+RM loadtest/REPORT.md -> loadtest/baseline/REPORT.md
+R  loadtest/results/AGGREGATE.md -> loadtest/baseline/results/AGGREGATE.md
+RM loadtest/results/ENVIRONMENT.md -> loadtest/baseline/results/ENVIRONMENT.md
+R  loadtest/results/env/environment_raw.txt -> loadtest/baseline/results/env/environment_raw.txt
+R  loadtest/results/l1/setup_users.txt -> loadtest/baseline/results/l1/setup_users.txt
+R  loadtest/results/l2/retry200_capacity_half_n1000/meta.json -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/meta.json
+R  loadtest/results/l2/retry200_capacity_half_n1000/run1.json -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/run1.json
+R  loadtest/results/l2/retry200_capacity_half_n1000/run1.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/run1.txt
+R  loadtest/results/l2/retry200_capacity_half_n1000/run2.json -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/run2.json
+R  loadtest/results/l2/retry200_capacity_half_n1000/run2.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/run2.txt
+R  loadtest/results/l2/retry200_capacity_half_n1000/run3.json -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/run3.json
+R  loadtest/results/l2/retry200_capacity_half_n1000/run3.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/run3.txt
+R  loadtest/results/l2/retry200_capacity_half_n1000/sql_run1.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/sql_run1.txt
+R  loadtest/results/l2/retry200_capacity_half_n1000/sql_run2.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/sql_run2.txt
+R  loadtest/results/l2/retry200_capacity_half_n1000/sql_run3.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n1000/sql_run3.txt
+R  loadtest/results/l2/retry200_capacity_half_n200/meta.json -> loadtest/baseline/results/l2/retry200_capacity_half_n200/meta.json
+R  loadtest/results/l2/retry200_capacity_half_n200/run1.json -> loadtest/baseline/results/l2/retry200_capacity_half_n200/run1.json
+R  loadtest/results/l2/retry200_capacity_half_n200/run1.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n200/run1.txt
+R  loadtest/results/l2/retry200_capacity_half_n200/run2.json -> loadtest/baseline/results/l2/retry200_capacity_half_n200/run2.json
+R  loadtest/results/l2/retry200_capacity_half_n200/run2.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n200/run2.txt
+R  loadtest/results/l2/retry200_capacity_half_n200/run3.json -> loadtest/baseline/results/l2/retry200_capacity_half_n200/run3.json
+R  loadtest/results/l2/retry200_capacity_half_n200/run3.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n200/run3.txt
+R  loadtest/results/l2/retry200_capacity_half_n200/sql_run1.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n200/sql_run1.txt
+R  loadtest/results/l2/retry200_capacity_half_n200/sql_run2.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n200/sql_run2.txt
+R  loadtest/results/l2/retry200_capacity_half_n200/sql_run3.txt -> loadtest/baseline/results/l2/retry200_capacity_half_n200/sql_run3.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/meta.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/meta.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/run1.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/run1.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/run1.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/run1.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/run2.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/run2.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/run2.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/run2.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/run3.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/run3.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/run3.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/run3.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/sql_run1.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/sql_run1.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/sql_run2.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/sql_run2.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n1000/sql_run3.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n1000/sql_run3.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/meta.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/meta.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/run1.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/run1.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/run1.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/run1.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/run2.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/run2.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/run2.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/run2.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/run3.json -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/run3.json
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/run3.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/run3.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/sql_run1.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/sql_run1.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/sql_run2.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/sql_run2.txt
+R  loadtest/results/l2/retry_unbounded_capacity_half_n200/sql_run3.txt -> loadtest/baseline/results/l2/retry_unbounded_capacity_half_n200/sql_run3.txt
+R  loadtest/results/l2/single_noretry_n1000/meta.json -> loadtest/baseline/results/l2/single_noretry_n1000/meta.json
+R  loadtest/results/l2/single_noretry_n1000/run1.json -> loadtest/baseline/results/l2/single_noretry_n1000/run1.json
+R  loadtest/results/l2/single_noretry_n1000/run1.txt -> loadtest/baseline/results/l2/single_noretry_n1000/run1.txt
+R  loadtest/results/l2/single_noretry_n1000/run2.json -> loadtest/baseline/results/l2/single_noretry_n1000/run2.json
+R  loadtest/results/l2/single_noretry_n1000/run2.txt -> loadtest/baseline/results/l2/single_noretry_n1000/run2.txt
+R  loadtest/results/l2/single_noretry_n1000/run3.json -> loadtest/baseline/results/l2/single_noretry_n1000/run3.json
+R  loadtest/results/l2/single_noretry_n1000/run3.txt -> loadtest/baseline/results/l2/single_noretry_n1000/run3.txt
+R  loadtest/results/l2/single_noretry_n1000/sql_run1.txt -> loadtest/baseline/results/l2/single_noretry_n1000/sql_run1.txt
+R  loadtest/results/l2/single_noretry_n1000/sql_run2.txt -> loadtest/baseline/results/l2/single_noretry_n1000/sql_run2.txt
+R  loadtest/results/l2/single_noretry_n1000/sql_run3.txt -> loadtest/baseline/results/l2/single_noretry_n1000/sql_run3.txt
+R  loadtest/results/l2/single_noretry_n200/meta.json -> loadtest/baseline/results/l2/single_noretry_n200/meta.json
+R  loadtest/results/l2/single_noretry_n200/run1.json -> loadtest/baseline/results/l2/single_noretry_n200/run1.json
+R  loadtest/results/l2/single_noretry_n200/run1.txt -> loadtest/baseline/results/l2/single_noretry_n200/run1.txt
+R  loadtest/results/l2/single_noretry_n200/run2.json -> loadtest/baseline/results/l2/single_noretry_n200/run2.json
+R  loadtest/results/l2/single_noretry_n200/run2.txt -> loadtest/baseline/results/l2/single_noretry_n200/run2.txt
+R  loadtest/results/l2/single_noretry_n200/run3.json -> loadtest/baseline/results/l2/single_noretry_n200/run3.json
+R  loadtest/results/l2/single_noretry_n200/run3.txt -> loadtest/baseline/results/l2/single_noretry_n200/run3.txt
+R  loadtest/results/l2/single_noretry_n200/sql_run1.txt -> loadtest/baseline/results/l2/single_noretry_n200/sql_run1.txt
+R  loadtest/results/l2/single_noretry_n200/sql_run2.txt -> loadtest/baseline/results/l2/single_noretry_n200/sql_run2.txt
+R  loadtest/results/l2/single_noretry_n200/sql_run3.txt -> loadtest/baseline/results/l2/single_noretry_n200/sql_run3.txt
+R  loadtest/results/l2/sweep_noretry/meta.json -> loadtest/baseline/results/l2/sweep_noretry/meta.json
+R  loadtest/results/l2/sweep_noretry/run1.json -> loadtest/baseline/results/l2/sweep_noretry/run1.json
+R  loadtest/results/l2/sweep_noretry/run1.txt -> loadtest/baseline/results/l2/sweep_noretry/run1.txt
+R  loadtest/results/l2/sweep_noretry/run2.json -> loadtest/baseline/results/l2/sweep_noretry/run2.json
+R  loadtest/results/l2/sweep_noretry/run2.txt -> loadtest/baseline/results/l2/sweep_noretry/run2.txt
+R  loadtest/results/l2/sweep_noretry/run3.json -> loadtest/baseline/results/l2/sweep_noretry/run3.json
+R  loadtest/results/l2/sweep_noretry/run3.txt -> loadtest/baseline/results/l2/sweep_noretry/run3.txt
+R  loadtest/results/l2/sweep_noretry/sql_run1.txt -> loadtest/baseline/results/l2/sweep_noretry/sql_run1.txt
+R  loadtest/results/l2/sweep_noretry/sql_run2.txt -> loadtest/baseline/results/l2/sweep_noretry/sql_run2.txt
+R  loadtest/results/l2/sweep_noretry/sql_run3.txt -> loadtest/baseline/results/l2/sweep_noretry/sql_run3.txt
+R  loadtest/results/l2/sweep_retry/meta.json -> loadtest/baseline/results/l2/sweep_retry/meta.json
+R  loadtest/results/l2/sweep_retry/run1.json -> loadtest/baseline/results/l2/sweep_retry/run1.json
+R  loadtest/results/l2/sweep_retry/run1.txt -> loadtest/baseline/results/l2/sweep_retry/run1.txt
+R  loadtest/results/l2/sweep_retry/run2.json -> loadtest/baseline/results/l2/sweep_retry/run2.json
+R  loadtest/results/l2/sweep_retry/run2.txt -> loadtest/baseline/results/l2/sweep_retry/run2.txt
+R  loadtest/results/l2/sweep_retry/run3.json -> loadtest/baseline/results/l2/sweep_retry/run3.json
+R  loadtest/results/l2/sweep_retry/run3.txt -> loadtest/baseline/results/l2/sweep_retry/run3.txt
+R  loadtest/results/l2/sweep_retry/sql_run1.txt -> loadtest/baseline/results/l2/sweep_retry/sql_run1.txt
+R  loadtest/results/l2/sweep_retry/sql_run2.txt -> loadtest/baseline/results/l2/sweep_retry/sql_run2.txt
+R  loadtest/results/l2/sweep_retry/sql_run3.txt -> loadtest/baseline/results/l2/sweep_retry/sql_run3.txt
+R  loadtest/results/l3/dup5_noretry_n1000/meta.json -> loadtest/baseline/results/l3/dup5_noretry_n1000/meta.json
+R  loadtest/results/l3/dup5_noretry_n1000/run1.json -> loadtest/baseline/results/l3/dup5_noretry_n1000/run1.json
+R  loadtest/results/l3/dup5_noretry_n1000/run1.txt -> loadtest/baseline/results/l3/dup5_noretry_n1000/run1.txt
+R  loadtest/results/l3/dup5_noretry_n1000/run2.json -> loadtest/baseline/results/l3/dup5_noretry_n1000/run2.json
+R  loadtest/results/l3/dup5_noretry_n1000/run2.txt -> loadtest/baseline/results/l3/dup5_noretry_n1000/run2.txt
+R  loadtest/results/l3/dup5_noretry_n1000/run3.json -> loadtest/baseline/results/l3/dup5_noretry_n1000/run3.json
+R  loadtest/results/l3/dup5_noretry_n1000/run3.txt -> loadtest/baseline/results/l3/dup5_noretry_n1000/run3.txt
+R  loadtest/results/l3/dup5_noretry_n1000/sql_run1.txt -> loadtest/baseline/results/l3/dup5_noretry_n1000/sql_run1.txt
+R  loadtest/results/l3/dup5_noretry_n1000/sql_run2.txt -> loadtest/baseline/results/l3/dup5_noretry_n1000/sql_run2.txt
+R  loadtest/results/l3/dup5_noretry_n1000/sql_run3.txt -> loadtest/baseline/results/l3/dup5_noretry_n1000/sql_run3.txt
+R  loadtest/results/l3/dup5_noretry_n200/meta.json -> loadtest/baseline/results/l3/dup5_noretry_n200/meta.json
+R  loadtest/results/l3/dup5_noretry_n200/run1.json -> loadtest/baseline/results/l3/dup5_noretry_n200/run1.json
+R  loadtest/results/l3/dup5_noretry_n200/run1.txt -> loadtest/baseline/results/l3/dup5_noretry_n200/run1.txt
+R  loadtest/results/l3/dup5_noretry_n200/run2.json -> loadtest/baseline/results/l3/dup5_noretry_n200/run2.json
+R  loadtest/results/l3/dup5_noretry_n200/run2.txt -> loadtest/baseline/results/l3/dup5_noretry_n200/run2.txt
+R  loadtest/results/l3/dup5_noretry_n200/run3.json -> loadtest/baseline/results/l3/dup5_noretry_n200/run3.json
+R  loadtest/results/l3/dup5_noretry_n200/run3.txt -> loadtest/baseline/results/l3/dup5_noretry_n200/run3.txt
+R  loadtest/results/l3/dup5_noretry_n200/sql_run1.txt -> loadtest/baseline/results/l3/dup5_noretry_n200/sql_run1.txt
+R  loadtest/results/l3/dup5_noretry_n200/sql_run2.txt -> loadtest/baseline/results/l3/dup5_noretry_n200/sql_run2.txt
+R  loadtest/results/l3/dup5_noretry_n200/sql_run3.txt -> loadtest/baseline/results/l3/dup5_noretry_n200/sql_run3.txt
+R  loadtest/results/l3/dup5_retry_n1000/meta.json -> loadtest/baseline/results/l3/dup5_retry_n1000/meta.json
+R  loadtest/results/l3/dup5_retry_n1000/run1.json -> loadtest/baseline/results/l3/dup5_retry_n1000/run1.json
+R  loadtest/results/l3/dup5_retry_n1000/run1.txt -> loadtest/baseline/results/l3/dup5_retry_n1000/run1.txt
+R  loadtest/results/l3/dup5_retry_n1000/run2.json -> loadtest/baseline/results/l3/dup5_retry_n1000/run2.json
+R  loadtest/results/l3/dup5_retry_n1000/run2.txt -> loadtest/baseline/results/l3/dup5_retry_n1000/run2.txt
+R  loadtest/results/l3/dup5_retry_n1000/run3.json -> loadtest/baseline/results/l3/dup5_retry_n1000/run3.json
+R  loadtest/results/l3/dup5_retry_n1000/run3.txt -> loadtest/baseline/results/l3/dup5_retry_n1000/run3.txt
+R  loadtest/results/l3/dup5_retry_n1000/sql_run1.txt -> loadtest/baseline/results/l3/dup5_retry_n1000/sql_run1.txt
+R  loadtest/results/l3/dup5_retry_n1000/sql_run2.txt -> loadtest/baseline/results/l3/dup5_retry_n1000/sql_run2.txt
+R  loadtest/results/l3/dup5_retry_n1000/sql_run3.txt -> loadtest/baseline/results/l3/dup5_retry_n1000/sql_run3.txt
+R  loadtest/results/l3/dup5_retry_n200/meta.json -> loadtest/baseline/results/l3/dup5_retry_n200/meta.json
+R  loadtest/results/l3/dup5_retry_n200/run1.json -> loadtest/baseline/results/l3/dup5_retry_n200/run1.json
+R  loadtest/results/l3/dup5_retry_n200/run1.txt -> loadtest/baseline/results/l3/dup5_retry_n200/run1.txt
+R  loadtest/results/l3/dup5_retry_n200/run2.json -> loadtest/baseline/results/l3/dup5_retry_n200/run2.json
+R  loadtest/results/l3/dup5_retry_n200/run2.txt -> loadtest/baseline/results/l3/dup5_retry_n200/run2.txt
+R  loadtest/results/l3/dup5_retry_n200/run3.json -> loadtest/baseline/results/l3/dup5_retry_n200/run3.json
+R  loadtest/results/l3/dup5_retry_n200/run3.txt -> loadtest/baseline/results/l3/dup5_retry_n200/run3.txt
+R  loadtest/results/l3/dup5_retry_n200/sql_run1.txt -> loadtest/baseline/results/l3/dup5_retry_n200/sql_run1.txt
+R  loadtest/results/l3/dup5_retry_n200/sql_run2.txt -> loadtest/baseline/results/l3/dup5_retry_n200/sql_run2.txt
+R  loadtest/results/l3/dup5_retry_n200/sql_run3.txt -> loadtest/baseline/results/l3/dup5_retry_n200/sql_run3.txt
+R  loadtest/results/l4/draw20_n1000/compare_run1.txt -> loadtest/baseline/results/l4/draw20_n1000/compare_run1.txt
+R  loadtest/results/l4/draw20_n1000/compare_run2.txt -> loadtest/baseline/results/l4/draw20_n1000/compare_run2.txt
+R  loadtest/results/l4/draw20_n1000/compare_run3.txt -> loadtest/baseline/results/l4/draw20_n1000/compare_run3.txt
+R  loadtest/results/l4/draw20_n1000/draw_api_results_run1.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_api_results_run1.txt
+R  loadtest/results/l4/draw20_n1000/draw_api_results_run2.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_api_results_run2.txt
+R  loadtest/results/l4/draw20_n1000/draw_api_results_run3.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_api_results_run3.txt
+R  loadtest/results/l4/draw20_n1000/draw_db_run1.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_db_run1.txt
+R  loadtest/results/l4/draw20_n1000/draw_db_run2.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_db_run2.txt
+R  loadtest/results/l4/draw20_n1000/draw_db_run3.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_db_run3.txt
+R  loadtest/results/l4/draw20_n1000/draw_post_response_run1.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_post_response_run1.txt
+R  loadtest/results/l4/draw20_n1000/draw_post_response_run2.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_post_response_run2.txt
+R  loadtest/results/l4/draw20_n1000/draw_post_response_run3.txt -> loadtest/baseline/results/l4/draw20_n1000/draw_post_response_run3.txt
+R  loadtest/results/l4/draw20_n1000/meta.json -> loadtest/baseline/results/l4/draw20_n1000/meta.json
+R  loadtest/results/l4/draw20_n1000/prep/prep_run1.json -> loadtest/baseline/results/l4/draw20_n1000/prep/prep_run1.json
+R  loadtest/results/l4/draw20_n1000/prep/prep_run1.txt -> loadtest/baseline/results/l4/draw20_n1000/prep/prep_run1.txt
+R  loadtest/results/l4/draw20_n1000/prep/prep_run2.json -> loadtest/baseline/results/l4/draw20_n1000/prep/prep_run2.json
+R  loadtest/results/l4/draw20_n1000/prep/prep_run2.txt -> loadtest/baseline/results/l4/draw20_n1000/prep/prep_run2.txt
+R  loadtest/results/l4/draw20_n1000/prep/prep_run3.json -> loadtest/baseline/results/l4/draw20_n1000/prep/prep_run3.json
+R  loadtest/results/l4/draw20_n1000/prep/prep_run3.txt -> loadtest/baseline/results/l4/draw20_n1000/prep/prep_run3.txt
+R  loadtest/results/l4/draw20_n1000/run1.json -> loadtest/baseline/results/l4/draw20_n1000/run1.json
+R  loadtest/results/l4/draw20_n1000/run1.txt -> loadtest/baseline/results/l4/draw20_n1000/run1.txt
+R  loadtest/results/l4/draw20_n1000/run2.json -> loadtest/baseline/results/l4/draw20_n1000/run2.json
+R  loadtest/results/l4/draw20_n1000/run2.txt -> loadtest/baseline/results/l4/draw20_n1000/run2.txt
+R  loadtest/results/l4/draw20_n1000/run3.json -> loadtest/baseline/results/l4/draw20_n1000/run3.json
+R  loadtest/results/l4/draw20_n1000/run3.txt -> loadtest/baseline/results/l4/draw20_n1000/run3.txt
+R  loadtest/results/l4/draw20_n1000/sql_run1.txt -> loadtest/baseline/results/l4/draw20_n1000/sql_run1.txt
+R  loadtest/results/l4/draw20_n1000/sql_run2.txt -> loadtest/baseline/results/l4/draw20_n1000/sql_run2.txt
+R  loadtest/results/l4/draw20_n1000/sql_run3.txt -> loadtest/baseline/results/l4/draw20_n1000/sql_run3.txt
+R  loadtest/results/l5/algorithm_200000.txt -> loadtest/baseline/results/l5/algorithm_200000.txt
+R  loadtest/results/l5/algorithm_5000_run1.txt -> loadtest/baseline/results/l5/algorithm_5000_run1.txt
+R  loadtest/results/l5/algorithm_5000_run2.txt -> loadtest/baseline/results/l5/algorithm_5000_run2.txt
+R  loadtest/results/l5/algorithm_5000_run3.txt -> loadtest/baseline/results/l5/algorithm_5000_run3.txt
+R  loadtest/results/l5/algorithm_calibration_2000x5000.txt -> loadtest/baseline/results/l5/algorithm_calibration_2000x5000.txt
+R  loadtest/results/l5/api_1000_run1.stderr.txt -> loadtest/baseline/results/l5/api_1000_run1.stderr.txt
+R  loadtest/results/l5/api_1000_run1.txt -> loadtest/baseline/results/l5/api_1000_run1.txt
+R  loadtest/results/l5/api_1000_run2.stderr.txt -> loadtest/baseline/results/l5/api_1000_run2.stderr.txt
+R  loadtest/results/l5/api_1000_run2.txt -> loadtest/baseline/results/l5/api_1000_run2.txt
+R  loadtest/results/l5/api_1000_run3.stderr.txt -> loadtest/baseline/results/l5/api_1000_run3.stderr.txt
+R  loadtest/results/l5/api_1000_run3.txt -> loadtest/baseline/results/l5/api_1000_run3.txt
+R  loadtest/results/l6/draw.txt -> loadtest/baseline/results/l6/draw.txt
+R  loadtest/results/l6/prep/prep.json -> loadtest/baseline/results/l6/prep/prep.json
+R  loadtest/results/l6/prep/prep.txt -> loadtest/baseline/results/l6/prep/prep.txt
+R  loadtest/results/l6/tamper.txt -> loadtest/baseline/results/l6/tamper.txt
+R  loadtest/results/l7/dataset.txt -> loadtest/baseline/results/l7/dataset.txt
+R  loadtest/results/l7/prep/prep.json -> loadtest/baseline/results/l7/prep/prep.json
+R  loadtest/results/l7/prep/prep.txt -> loadtest/baseline/results/l7/prep/prep.txt
+R  loadtest/results/l7/rate1500/meta.json -> loadtest/baseline/results/l7/rate1500/meta.json
+R  loadtest/results/l7/rate1500/run1.json -> loadtest/baseline/results/l7/rate1500/run1.json
+R  loadtest/results/l7/rate1500/run1.txt -> loadtest/baseline/results/l7/rate1500/run1.txt
+R  loadtest/results/l7/rate1500/run2.json -> loadtest/baseline/results/l7/rate1500/run2.json
+R  loadtest/results/l7/rate1500/run2.txt -> loadtest/baseline/results/l7/rate1500/run2.txt
+R  loadtest/results/l7/rate1500/run3.json -> loadtest/baseline/results/l7/rate1500/run3.json
+R  loadtest/results/l7/rate1500/run3.txt -> loadtest/baseline/results/l7/rate1500/run3.txt
+R  loadtest/results/l7/rate300/meta.json -> loadtest/baseline/results/l7/rate300/meta.json
+R  loadtest/results/l7/rate300/run1.json -> loadtest/baseline/results/l7/rate300/run1.json
+R  loadtest/results/l7/rate300/run1.txt -> loadtest/baseline/results/l7/rate300/run1.txt
+R  loadtest/results/l7/rate300/run2.json -> loadtest/baseline/results/l7/rate300/run2.json
+R  loadtest/results/l7/rate300/run2.txt -> loadtest/baseline/results/l7/rate300/run2.txt
+R  loadtest/results/l7/rate300/run3.json -> loadtest/baseline/results/l7/rate300/run3.json
+R  loadtest/results/l7/rate300/run3.txt -> loadtest/baseline/results/l7/rate300/run3.txt
+R  loadtest/results/l7/rate3000/meta.json -> loadtest/baseline/results/l7/rate3000/meta.json
+R  loadtest/results/l7/rate3000/run1.json -> loadtest/baseline/results/l7/rate3000/run1.json
+R  loadtest/results/l7/rate3000/run1.txt -> loadtest/baseline/results/l7/rate3000/run1.txt
+R  loadtest/results/l7/rate3000/run2.json -> loadtest/baseline/results/l7/rate3000/run2.json
+R  loadtest/results/l7/rate3000/run2.txt -> loadtest/baseline/results/l7/rate3000/run2.txt
+R  loadtest/results/l7/rate3000/run3.json -> loadtest/baseline/results/l7/rate3000/run3.json
+R  loadtest/results/l7/rate3000/run3.txt -> loadtest/baseline/results/l7/rate3000/run3.txt
+R  loadtest/results/l8/limits_in_effect.txt -> loadtest/baseline/results/l8/limits_in_effect.txt
+R  loadtest/results/l8/run1.txt -> loadtest/baseline/results/l8/run1.txt
+R  loadtest/results/l8/run2.txt -> loadtest/baseline/results/l8/run2.txt
+R  loadtest/results/l8/run3.txt -> loadtest/baseline/results/l8/run3.txt
+R  loadtest/results/l9/meta.json -> loadtest/baseline/results/l9/meta.json
+R  loadtest/results/l9/run1.json -> loadtest/baseline/results/l9/run1.json
+R  loadtest/results/l9/run1.txt -> loadtest/baseline/results/l9/run1.txt
+R  loadtest/results/l9/run2.json -> loadtest/baseline/results/l9/run2.json
+R  loadtest/results/l9/run2.txt -> loadtest/baseline/results/l9/run2.txt
+R  loadtest/results/l9/run3.json -> loadtest/baseline/results/l9/run3.json
+R  loadtest/results/l9/run3.txt -> loadtest/baseline/results/l9/run3.txt
+R  loadtest/results/l9/sql_run1.txt -> loadtest/baseline/results/l9/sql_run1.txt
+R  loadtest/results/l9/sql_run2.txt -> loadtest/baseline/results/l9/sql_run2.txt
+R  loadtest/results/l9/sql_run3.txt -> loadtest/baseline/results/l9/sql_run3.txt
+R  loadtest/results/l9/timeline_run1.txt -> loadtest/baseline/results/l9/timeline_run1.txt
+R  loadtest/results/l9/timeline_run2.txt -> loadtest/baseline/results/l9/timeline_run2.txt
+R  loadtest/results/l9/timeline_run3.txt -> loadtest/baseline/results/l9/timeline_run3.txt
+R  loadtest/results/phase0/db_roles_and_privileges.txt -> loadtest/baseline/results/phase0/db_roles_and_privileges.txt
+R  loadtest/results/superseded/README.md -> loadtest/baseline/results/superseded/README.md
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/meta.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/meta.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run1.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run1.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run2.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run2.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run3.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run3.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/sql_run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/sql_run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/sql_run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/sql_run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/sql_run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n1000/sql_run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/meta.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/meta.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run1.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run1.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run2.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run2.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run3.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run3.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/sql_run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/sql_run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/sql_run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/sql_run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/sql_run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/retry200_capacity_half_n200/sql_run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/meta.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/meta.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run1.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run1.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run2.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run2.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run3.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run3.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/sql_run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/sql_run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/sql_run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/sql_run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/sql_run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n1000/sql_run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/meta.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/meta.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run1.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run1.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run2.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run2.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run3.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run3.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/sql_run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/sql_run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/sql_run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/sql_run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/sql_run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/single_noretry_n200/sql_run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/meta.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/meta.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run1.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run1.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run2.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run2.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run3.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run3.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/sql_run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/sql_run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/sql_run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/sql_run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_noretry/sql_run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_noretry/sql_run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/meta.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/meta.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/run1.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/run1.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/run2.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/run2.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/run3.json -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/run3.json
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/run3.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/sql_run1.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/sql_run1.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/sql_run2.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/sql_run2.txt
+R  loadtest/results/superseded/l2_pre_gaveup_counter/sweep_retry/sql_run3.txt -> loadtest/baseline/results/superseded/l2_pre_gaveup_counter/sweep_retry/sql_run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/meta.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/meta.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/run1.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/run1.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/run2.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/run2.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/run3.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/run3.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/sql_run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/sql_run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/sql_run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/sql_run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n1000/sql_run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n1000/sql_run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/meta.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/meta.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/run1.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/run1.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/run2.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/run2.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/run3.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/run3.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/sql_run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/sql_run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/sql_run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/sql_run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_noretry_n200/sql_run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_noretry_n200/sql_run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/meta.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/meta.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/run1.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/run1.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/run2.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/run2.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/run3.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/run3.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/sql_run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/sql_run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/sql_run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/sql_run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n1000/sql_run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n1000/sql_run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/meta.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/meta.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/run1.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/run1.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/run2.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/run2.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/run3.json -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/run3.json
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/run3.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/sql_run1.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/sql_run1.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/sql_run2.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/sql_run2.txt
+R  loadtest/results/superseded/l3_first_attempt/dup5_retry_n200/sql_run3.txt -> loadtest/baseline/results/superseded/l3_first_attempt/dup5_retry_n200/sql_run3.txt
+R  loadtest/results/superseded/l5_first_attempt/algorithm_200000.txt -> loadtest/baseline/results/superseded/l5_first_attempt/algorithm_200000.txt
+R  loadtest/results/superseded/l5_first_attempt/algorithm_5000_run1.txt -> loadtest/baseline/results/superseded/l5_first_attempt/algorithm_5000_run1.txt
+R  loadtest/results/superseded/l5_first_attempt/algorithm_5000_run2.txt -> loadtest/baseline/results/superseded/l5_first_attempt/algorithm_5000_run2.txt
+R  loadtest/results/superseded/l5_first_attempt/algorithm_5000_run3.txt -> loadtest/baseline/results/superseded/l5_first_attempt/algorithm_5000_run3.txt
+R  loadtest/results/superseded/l5_first_attempt/algorithm_calibration_2000x5000.txt -> loadtest/baseline/results/superseded/l5_first_attempt/algorithm_calibration_2000x5000.txt
+R  loadtest/results/superseded/l5_first_attempt/api_1000_run1.txt -> loadtest/baseline/results/superseded/l5_first_attempt/api_1000_run1.txt
+R  loadtest/results/superseded/l5_first_attempt/run_log_excerpt.txt -> loadtest/baseline/results/superseded/l5_first_attempt/run_log_excerpt.txt
+R  loadtest/results/superseded/l7_without_status_classes/dataset.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/dataset.txt
+R  loadtest/results/superseded/l7_without_status_classes/prep/prep.json -> loadtest/baseline/results/superseded/l7_without_status_classes/prep/prep.json
+R  loadtest/results/superseded/l7_without_status_classes/prep/prep.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/prep/prep.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate1500/meta.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate1500/meta.json
+R  loadtest/results/superseded/l7_without_status_classes/rate1500/run1.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate1500/run1.json
+R  loadtest/results/superseded/l7_without_status_classes/rate1500/run1.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate1500/run1.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate1500/run2.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate1500/run2.json
+R  loadtest/results/superseded/l7_without_status_classes/rate1500/run2.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate1500/run2.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate1500/run3.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate1500/run3.json
+R  loadtest/results/superseded/l7_without_status_classes/rate1500/run3.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate1500/run3.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate300/meta.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate300/meta.json
+R  loadtest/results/superseded/l7_without_status_classes/rate300/run1.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate300/run1.json
+R  loadtest/results/superseded/l7_without_status_classes/rate300/run1.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate300/run1.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate300/run2.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate300/run2.json
+R  loadtest/results/superseded/l7_without_status_classes/rate300/run2.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate300/run2.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate300/run3.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate300/run3.json
+R  loadtest/results/superseded/l7_without_status_classes/rate300/run3.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate300/run3.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate3000/meta.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate3000/meta.json
+R  loadtest/results/superseded/l7_without_status_classes/rate3000/run1.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate3000/run1.json
+R  loadtest/results/superseded/l7_without_status_classes/rate3000/run1.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate3000/run1.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate3000/run2.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate3000/run2.json
+R  loadtest/results/superseded/l7_without_status_classes/rate3000/run2.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate3000/run2.txt
+R  loadtest/results/superseded/l7_without_status_classes/rate3000/run3.json -> loadtest/baseline/results/superseded/l7_without_status_classes/rate3000/run3.json
+R  loadtest/results/superseded/l7_without_status_classes/rate3000/run3.txt -> loadtest/baseline/results/superseded/l7_without_status_classes/rate3000/run3.txt
+R  loadtest/results/superseded/l8_probe_race/limits_in_effect.txt -> loadtest/baseline/results/superseded/l8_probe_race/limits_in_effect.txt
+R  loadtest/results/superseded/l8_probe_race/run1.txt -> loadtest/baseline/results/superseded/l8_probe_race/run1.txt
+R  loadtest/results/superseded/l8_probe_race/run2.txt -> loadtest/baseline/results/superseded/l8_probe_race/run2.txt
+R  loadtest/results/superseded/l8_probe_race/run3.txt -> loadtest/baseline/results/superseded/l8_probe_race/run3.txt
+R  loadtest/results/totals.txt -> loadtest/baseline/results/totals.txt
+R  loadtest/results/warmup/warmup_l2.json -> loadtest/baseline/results/warmup/warmup_l2.json
+R  loadtest/results/warmup/warmup_l2.txt -> loadtest/baseline/results/warmup/warmup_l2.txt
+R  loadtest/results/warmup/warmup_l2u.json -> loadtest/baseline/results/warmup/warmup_l2u.json
+R  loadtest/results/warmup/warmup_l2u.txt -> loadtest/baseline/results/warmup/warmup_l2u.txt
+R  loadtest/results/warmup/warmup_l3.json -> loadtest/baseline/results/warmup/warmup_l3.json
+R  loadtest/results/warmup/warmup_l3.txt -> loadtest/baseline/results/warmup/warmup_l3.txt
+R  loadtest/results/warmup/warmup_l7.json -> loadtest/baseline/results/warmup/warmup_l7.json
+R  loadtest/results/warmup/warmup_l7.txt -> loadtest/baseline/results/warmup/warmup_l7.txt
+ M loadtest/cmd/fairness-api/main.go
+ M loadtest/docker-compose.loadtest.yml
+ M loadtest/k6/l2_hot_event.js
+ M loadtest/k6/l2_sweep.js
+ M loadtest/k6/l4_draws.js
+ M loadtest/k6/lib.js
+ M loadtest/lib/common.sh
+ M loadtest/run.sh
+ M loadtest/sql/l4_invariants.sql
+ M loadtest/sql/l6_tamper.sql
+ M loadtest/sql/phase0_roles.sql
+ M loadtest/sql/reset.sql
+?? Agent.md
+?? loadtest/results/
+## host
+ProductName:		macOS
+ProductVersion:		26.3
+BuildVersion:		25D125
+Apple M2
+8
+8589934592
+## docker
+client=28.5.1 server=28.5.1
+docker_desktop_vm_cpus=8 docker_desktop_vm_mem_bytes=8322969600 os=Docker Desktop kernel=6.10.14-linuxkit
+Docker Compose version v2.40.2-desktop.1
+## k6
+k6 v2.3.0 (commit/devel, go1.27.1, darwin/arm64)
+## go (host, for helpers)
+go version go1.26.3 darwin/arm64
+## app build image
+FROM golang:1.22-alpine AS builder
+## postgres
+PostgreSQL 16.15 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+100
+## redis
+Redis server v=7.4.12 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=2d3dd1569b92d75e
+## app env (secrets redacted)
+
+API_RATE_LIMIT_REQUESTS=10000000
+API_RATE_LIMIT_WINDOW=1m
+AUTH_ACCOUNT_RATE_LIMIT_REQUESTS=10000000
+AUTH_ACCOUNT_RATE_LIMIT_WINDOW=15m
+AUTH_RATE_LIMIT_REQUESTS=10000000
+AUTH_RATE_LIMIT_WINDOW=1m
+BOOTSTRAP_ADMIN_EMAIL=lt-admin@loadtest.local
+BOOTSTRAP_ADMIN_NAME=Loadtest-Admin
+BOOTSTRAP_ADMIN_PASSWORD=<redacted>
+CORS_ALLOWED_ORIGINS=
+DATABASE_URL=<redacted>
+DB_MAX_CONNS=25
+DB_MIN_CONNS=5
+ENV=production
+JWT_EXPIRY=24h
+JWT_SECRET=<redacted>
+LOCK_TTL=5s
+LOCK_WAIT_TIMEOUT=10s
+LOG_LEVEL=warn
+MAX_WINNERS=100
+MIGRATE_ON_START=true
+MIGRATION_DATABASE_URL=<redacted>
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PORT=8080
+PRETTY=false
+REDIS_URL=redis://redis:6379/0
+SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+TRUSTED_PROXIES=
+## container resource limits (0 = none)
+lt_app nano_cpus=0 memory=0
+lt_postgres nano_cpus=0 memory=0
+lt_redis nano_cpus=0 memory=0

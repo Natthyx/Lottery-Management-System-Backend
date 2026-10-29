@@ -1,0 +1,4 @@
+[22:24:37] === l3 ===
+[22:24:37] warm-up
+curl: (52) Empty reply from server
+exit=4

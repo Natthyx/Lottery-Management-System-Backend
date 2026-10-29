@@ -1,0 +1,76 @@
+SELECT bookings_per_user, count(*) AS users
+FROM (
+  SELECT u.id, count(b.id) AS bookings_per_user
+  FROM (SELECT id FROM users WHERE email LIKE 'lt-user-%' ORDER BY id LIMIT 200) u
+  LEFT JOIN bookings b ON b.user_id = u.id AND b.event_id = 1
+  GROUP BY u.id
+) x
+GROUP BY 1 ORDER BY 1;
+ bookings_per_user | users 
+-------------------+-------
+                 1 |   200
+(1 row)
+
+WITH per_user AS (
+  SELECT u.id, count(b.id) AS c
+  FROM (SELECT id FROM users WHERE email LIKE 'lt-user-%' ORDER BY id LIMIT 200) u
+  LEFT JOIN bookings b ON b.user_id = u.id AND b.event_id = 1
+  GROUP BY u.id
+)
+SELECT CASE WHEN 1 = 1 THEN 'users with exactly one booking'
+            ELSE 'users with zero bookings (all attempts busy; informational)' END AS check,
+       CASE WHEN 1 = 1 THEN (SELECT count(*) FROM per_user WHERE c = 1) || ' of ' || 200
+            ELSE (SELECT count(*) FROM per_user WHERE c = 0) || ' of ' || 200 END AS observed,
+       CASE WHEN 1 = 0 THEN 'INFO'
+            WHEN (SELECT count(*) FROM per_user WHERE c = 1) = 200 THEN 'PASS' ELSE 'FAIL' END AS result
+UNION ALL
+SELECT 'users with more than one booking', (SELECT count(*) FROM per_user WHERE c > 1)::text,
+       CASE WHEN (SELECT count(*) FROM per_user WHERE c > 1) = 0 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+SELECT 'bookings on event from non-test users',
+       (SELECT count(*) FROM bookings b WHERE b.event_id = 1
+          AND b.user_id NOT IN (SELECT id FROM users WHERE email LIKE 'lt-user-%' ORDER BY id LIMIT 200))::text,
+       CASE WHEN (SELECT count(*) FROM bookings b WHERE b.event_id = 1
+          AND b.user_id NOT IN (SELECT id FROM users WHERE email LIKE 'lt-user-%' ORDER BY id LIMIT 200)) = 0
+            THEN 'PASS' ELSE 'FAIL' END;
+                 check                 |  observed  | result 
+---------------------------------------+------------+--------
+ users with exactly one booking        | 200 of 200 | PASS
+ users with more than one booking      | 0          | PASS
+ bookings on event from non-test users | 0          | PASS
+(3 rows)
+
+SELECT 'per_event' AS section, e.id AS event_id, e.capacity, count(b.id) AS bookings,
+       count(DISTINCT b.user_id) AS distinct_users
+FROM events e LEFT JOIN bookings b ON b.event_id = e.id
+GROUP BY e.id HAVING count(b.id) > 0
+ORDER BY e.id
+LIMIT 20;
+  section  | event_id | capacity | bookings | distinct_users 
+-----------+----------+----------+----------+----------------
+ per_event |        1 |     1000 |      200 |            200
+(1 row)
+
+WITH dup AS (
+  SELECT event_id, user_id, count(*) c FROM bookings GROUP BY 1, 2 HAVING count(*) > 1
+), over AS (
+  SELECT e.id FROM events e JOIN bookings b ON b.event_id = e.id
+  GROUP BY e.id, e.capacity HAVING count(*) > e.capacity
+), tot AS (SELECT count(*) n FROM bookings)
+SELECT 'duplicate (event,user) pairs' AS check, (SELECT count(*) FROM dup)::text AS observed,
+       CASE WHEN (SELECT count(*) FROM dup) = 0 THEN 'PASS' ELSE 'FAIL' END AS result
+UNION ALL
+SELECT 'events over capacity', (SELECT count(*) FROM over)::text,
+       CASE WHEN (SELECT count(*) FROM over) = 0 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+SELECT 'total bookings vs client-observed 201s',
+       (SELECT n FROM tot) || ' vs ' || 200,
+       CASE WHEN 200 < 0 THEN 'SKIPPED'
+            WHEN (SELECT n FROM tot) = 200 THEN 'PASS' ELSE 'FAIL' END;
+                 check                  |  observed  | result 
+----------------------------------------+------------+--------
+ duplicate (event,user) pairs           | 0          | PASS
+ events over capacity                   | 0          | PASS
+ total bookings vs client-observed 201s | 200 vs 200 | PASS
+(3 rows)
+

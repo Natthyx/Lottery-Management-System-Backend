@@ -1,0 +1,31 @@
+testRunDurationMs=60003.26
+data_received: count=1043795937 rate=17395653.786
+data_received{ep:get}: count=3618603 rate=60306.773
+data_received{ep:list}: rate=505356.759 count=30323053
+data_received{ep:results}: count=1009854281 rate=16829990.254
+data_sent: count=1458243 rate=24302.73
+dropped_iterations: count=0 rate=0
+http_req_blocked: avg=0.008 p(90)=0.007 p(95)=0.009 p(99)=0.067 max=0.746 count=18003 min=0.001 med=0.005
+http_req_connecting: med=0 avg=0.002 p(90)=0 p(95)=0 p(99)=0 max=0.681 count=18003 min=0
+http_req_duration: avg=2.308 p(90)=3.991 p(95)=5.167 p(99)=9.549 max=45.993 count=18003 min=0.625 med=1.532
+http_req_duration{ep:get}: p(99)=5.452 max=35.171 count=6001 min=0.625 med=1.074 avg=1.349 p(90)=2.034 p(95)=2.346
+http_req_duration{ep:list}: p(99)=7.296 max=35.009 count=6001 min=0.821 med=1.343 avg=1.749 p(90)=2.676 p(95)=3.079
+http_req_duration{ep:results}: p(95)=6.818 p(99)=11.727 max=45.993 count=6001 min=1.885 med=3.081 avg=3.825 p(90)=5.47
+http_req_duration{expected_response:true}: p(95)=5.167 p(99)=9.549 max=45.993 count=18003 min=0.625 med=1.532 avg=2.308 p(90)=3.991
+http_req_failed: rate=0 passes=0 fails=18003
+http_req_failed{ep:get}: rate=0 passes=0 fails=6001
+http_req_failed{ep:list}: rate=0 passes=0 fails=6001
+http_req_failed{ep:results}: rate=0 passes=0 fails=6001
+http_req_receiving: p(99)=2.72 max=32.944 count=18003 min=0.01 med=0.029 avg=0.226 p(90)=0.431 p(95)=0.524
+http_req_sending: p(90)=0.022 p(95)=0.027 p(99)=0.054 max=5.333 count=18003 min=0.002 med=0.014 avg=0.017
+http_req_tls_handshaking: min=0 med=0 avg=0 p(90)=0 p(95)=0 p(99)=0 max=0 count=18003
+http_req_waiting: p(90)=3.346 p(95)=4.453 p(99)=7.58 max=41.919 count=18003 min=0.549 med=1.482 avg=2.065
+http_reqs: count=18003 rate=300.034
+http_reqs{ep:get}: count=6001 rate=100.011
+http_reqs{ep:list}: count=6001 rate=100.011
+http_reqs{ep:results}: rate=100.011 count=6001
+iteration_duration: min=0.723 med=1.651 avg=2.428 p(90)=4.128 p(95)=5.31 p(99)=9.696 max=46.442 count=18003
+iterations: count=18003 rate=300.034
+st_2xx: rate=300.034 count=18003
+vus: value=1 min=0 max=3
+vus_max: max=150 value=150 min=150

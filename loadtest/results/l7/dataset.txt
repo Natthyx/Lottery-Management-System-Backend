@@ -1,0 +1,5 @@
+GET /events bytes=4706
+GET /events/{id} bytes=276
+GET /events/{id}/results bytes=167933
+events=50
+bookings=1000

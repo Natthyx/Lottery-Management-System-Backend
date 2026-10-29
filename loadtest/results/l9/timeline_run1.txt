@@ -1,0 +1,12 @@
+sigterm: docker kill started_ms=1793303459798 returned_ms=1793303459854 (host clock)
+restart_count_before=0 after=0 state_after_run=exited
+## app log lines after SIGTERM (http_request lines omitted)
+{"level":"info","signal":"terminated","time":"2026-10-29T19:50:59.838300044Z","message":"shutdown signal received"}
+{"level":"info","time":"2026-10-29T19:50:59.871760252Z","message":"server stopped cleanly"}
+## per-request outcome by phase (from the R lines in run1.txt)
+## in_flight = started before docker kill began and finished after it
+26826 finished_before_sigterm s201 status=201 k6_error_code=0
+50 in_flight_at_sigterm s201 status=201 k6_error_code=0
+6800 started_after_sigterm netErr status=0 k6_error_code=1212
+150 started_after_sigterm netErr status=0 k6_error_code=1000
+133 started_after_sigterm s201 status=201 k6_error_code=0

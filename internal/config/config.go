@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -24,8 +25,15 @@ type Config struct {
 	MaxRequestBytes int64
 
 	// ── PostgreSQL ──────────────────────────────────────────
-	DatabaseURL    string
-	MigrateOnStart bool
+	// DatabaseURL is the runtime connection. In production it should be a
+	// least-privilege role that does not own the schema (see
+	// deploy/postgres/initdb). MigrationDatabaseURL, when set, is used only
+	// to apply migrations and should be the schema owner.
+	DatabaseURL          string
+	MigrationDatabaseURL string
+	MigrateOnStart       bool
+	DBMaxConns           int32
+	DBMinConns           int32
 
 	// ── Redis ───────────────────────────────────────────────
 	RedisOptions *redis.Options
@@ -36,13 +44,20 @@ type Config struct {
 
 	// ── Lottery / booking ───────────────────────────────────
 	LockTTL    time.Duration
+	LockWait   time.Duration
 	MaxWinners int
 
-	// ── Auth rate limiting ──────────────────────────────────
-	AuthLimitRequests int
-	AuthLimitWindow   time.Duration
-	APILimitRequests  int
-	APILimitWindow    time.Duration
+	// ── Rate limiting ───────────────────────────────────────
+	AuthLimitRequests    int
+	AuthLimitWindow      time.Duration
+	AccountLimitRequests int
+	AccountLimitWindow   time.Duration
+	APILimitRequests     int
+	APILimitWindow       time.Duration
+
+	// TrustedProxies lists the peers allowed to set X-Forwarded-For /
+	// X-Real-IP. Empty means the client IP is always the TCP peer.
+	TrustedProxies []netip.Prefix
 
 	// ── CORS ────────────────────────────────────────────────
 	CORSAllowedOrigins []string
@@ -75,6 +90,17 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	trustedProxies, err := parsePrefixes(getEnv("TRUSTED_PROXIES", ""))
+	if err != nil {
+		return nil, fmt.Errorf("TRUSTED_PROXIES: %w", err)
+	}
+
+	maxConns := getInt("DB_MAX_CONNS", 25)
+	minConns := getInt("DB_MIN_CONNS", 5)
+	if maxConns < 1 || minConns < 0 || minConns > maxConns {
+		return nil, fmt.Errorf("DB_MIN_CONNS (%d) and DB_MAX_CONNS (%d) must satisfy 0 <= min <= max, max >= 1", minConns, maxConns)
+	}
+
 	cfg := &Config{
 		Env:             getEnv("ENV", "development"),
 		Port:            getEnv("PORT", "8080"),
@@ -84,8 +110,11 @@ func Load() (*Config, error) {
 		ShutdownTimeout: getDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
 		MaxRequestBytes: int64(getInt("MAX_REQUEST_BYTES", 1<<20)), // 1 MiB
 
-		DatabaseURL:    dbURL,
-		MigrateOnStart: getBool("MIGRATE_ON_START", true),
+		DatabaseURL:          dbURL,
+		MigrationDatabaseURL: strings.TrimSpace(os.Getenv("MIGRATION_DATABASE_URL")),
+		MigrateOnStart:       getBool("MIGRATE_ON_START", true),
+		DBMaxConns:           int32(maxConns),
+		DBMinConns:           int32(minConns),
 
 		RedisOptions: redisOpts,
 
@@ -93,12 +122,17 @@ func Load() (*Config, error) {
 		JWTExpiry: getDuration("JWT_EXPIRY", 24*time.Hour),
 
 		LockTTL:    getDuration("LOCK_TTL", 5*time.Second),
+		LockWait:   getDuration("LOCK_WAIT_TIMEOUT", 10*time.Second),
 		MaxWinners: getInt("MAX_WINNERS", 100),
 
-		AuthLimitRequests: getInt("AUTH_RATE_LIMIT_REQUESTS", 10),
-		AuthLimitWindow:   getDuration("AUTH_RATE_LIMIT_WINDOW", 1*time.Minute),
-		APILimitRequests:  getInt("API_RATE_LIMIT_REQUESTS", 100),
-		APILimitWindow:    getDuration("API_RATE_LIMIT_WINDOW", 1*time.Minute),
+		AuthLimitRequests:    getInt("AUTH_RATE_LIMIT_REQUESTS", 10),
+		AuthLimitWindow:      getDuration("AUTH_RATE_LIMIT_WINDOW", 1*time.Minute),
+		AccountLimitRequests: getInt("AUTH_ACCOUNT_RATE_LIMIT_REQUESTS", 10),
+		AccountLimitWindow:   getDuration("AUTH_ACCOUNT_RATE_LIMIT_WINDOW", 15*time.Minute),
+		APILimitRequests:     getInt("API_RATE_LIMIT_REQUESTS", 100),
+		APILimitWindow:       getDuration("API_RATE_LIMIT_WINDOW", 1*time.Minute),
+
+		TrustedProxies: trustedProxies,
 
 		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "")),
 
@@ -186,6 +220,28 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+// parsePrefixes parses a CSV of CIDRs or bare IPs ("10.0.0.0/8, 127.0.0.1").
+func parsePrefixes(s string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, item := range splitCSV(s) {
+		if strings.Contains(item, "/") {
+			p, err := netip.ParsePrefix(item)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, p.Masked())
+			continue
+		}
+		a, err := netip.ParseAddr(item)
+		if err != nil {
+			return nil, err
+		}
+		a = a.Unmap()
+		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+	return out, nil
 }
 
 func splitCSV(s string) []string {
