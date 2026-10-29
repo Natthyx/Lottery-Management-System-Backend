@@ -36,15 +36,22 @@ func (h *Handler) Book(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.BookWithLock(r.Context(), eventID, userID); err != nil {
 		switch {
-		case errors.Is(err, ErrEventBusy), errors.Is(err, ErrAlreadyBooked),
-			errors.Is(err, ErrEventNotOpen), errors.Is(err, ErrEventFull):
-			httpx.Conflict(w, err.Error())
+		case errors.Is(err, ErrEventBusy):
+			// Retryable: the request did not get its turn within LOCK_WAIT_TIMEOUT.
+			w.Header().Set("Retry-After", "1")
+			httpx.Error(w, http.StatusServiceUnavailable, "event_busy", err.Error())
+		case errors.Is(err, ErrAlreadyBooked):
+			httpx.Error(w, http.StatusConflict, "already_booked", err.Error())
+		case errors.Is(err, ErrEventNotOpen):
+			httpx.Error(w, http.StatusConflict, "event_not_open", err.Error())
+		case errors.Is(err, ErrEventFull):
+			httpx.Error(w, http.StatusConflict, "event_full", err.Error())
 		case errors.Is(err, ErrEventNotFound):
-			httpx.NotFound(w, err.Error())
+			httpx.Error(w, http.StatusNotFound, "event_not_found", err.Error())
 		case errors.Is(err, ErrInvalidInput):
-			httpx.BadRequest(w, err.Error())
+			httpx.Error(w, http.StatusBadRequest, "invalid_input", err.Error())
 		default:
-			httpx.Internal(w, "could not create booking")
+			httpx.Error(w, http.StatusInternalServerError, "internal", "could not create booking")
 		}
 		return
 	}

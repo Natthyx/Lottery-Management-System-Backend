@@ -31,14 +31,19 @@ func (h *Handler) Draw(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEventNotFound):
-			httpx.NotFound(w, err.Error())
-		case errors.Is(err, ErrEventAlreadyDrawn),
-			errors.Is(err, ErrEventCancelled),
-			errors.Is(err, ErrEventNotClosed),
-			errors.Is(err, ErrNoParticipants):
-			httpx.Conflict(w, err.Error())
+			httpx.Error(w, http.StatusNotFound, "event_not_found", err.Error())
+		case errors.Is(err, ErrEventAlreadyDrawn):
+			httpx.Error(w, http.StatusConflict, "already_drawn", err.Error())
+		case errors.Is(err, ErrEventCancelled):
+			httpx.Error(w, http.StatusConflict, "event_cancelled", err.Error())
+		case errors.Is(err, ErrEventNotClosed):
+			httpx.Error(w, http.StatusConflict, "event_not_closed", err.Error())
+		case errors.Is(err, ErrDrawNotDue):
+			httpx.Error(w, http.StatusConflict, "draw_not_due", err.Error())
+		case errors.Is(err, ErrNoParticipants):
+			httpx.Error(w, http.StatusConflict, "no_participants", err.Error())
 		default:
-			httpx.Internal(w, "could not run draw")
+			httpx.Error(w, http.StatusInternalServerError, "internal", "could not run draw")
 		}
 		return
 	}

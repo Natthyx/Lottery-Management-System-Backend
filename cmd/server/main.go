@@ -42,17 +42,19 @@ func run() error {
 	defer rootCancel()
 
 	// ── Datastores ─────────────────────────────────────────
-	pgPool, err := db.NewPool(rootCtx, cfg.DatabaseURL)
+	// Migrations run first, as the schema owner when MIGRATION_DATABASE_URL
+	// is set, so the runtime pool can use a role that owns nothing.
+	if cfg.MigrateOnStart {
+		if err := migrate(rootCtx, cfg); err != nil {
+			return err
+		}
+	}
+
+	pgPool, err := db.NewPool(rootCtx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBMinConns)
 	if err != nil {
 		return err
 	}
 	defer pgPool.Close()
-
-	if cfg.MigrateOnStart {
-		if err := db.RunMigrations(rootCtx, pgPool); err != nil {
-			return err
-		}
-	}
 
 	redisClient, err := db.NewRedis(rootCtx, cfg.RedisOptions)
 	if err != nil {
@@ -62,8 +64,8 @@ func run() error {
 
 	// ── Services ───────────────────────────────────────────
 	authSvc := auth.NewService(pgPool, cfg.JWTSecret, cfg.JWTExpiry)
-	eventSvc := event.NewService(pgPool)
-	bookingSvc := booking.NewService(pgPool, redisClient, cfg.LockTTL)
+	eventSvc := event.NewService(pgPool, cfg.MaxWinners)
+	bookingSvc := booking.NewService(pgPool, redisClient, cfg.LockTTL, cfg.LockWait)
 	lotterySvc := lottery.NewService(pgPool)
 
 	if cfg.BootstrapAdminEmail != "" && cfg.BootstrapAdminPassword != "" {
@@ -90,52 +92,65 @@ func run() error {
 	// is still logged as a completed request.
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(chiMiddleware.RealIP)
+	// Client IP comes from X-Forwarded-For / X-Real-IP only when the TCP
+	// peer is a configured trusted proxy; otherwise a client could choose
+	// its own rate-limit key by sending a header.
+	r.Use(middleware.ClientIP(cfg.TrustedProxies))
 	r.Use(chiMiddleware.RequestID)
+	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.BodyLimit(cfg.MaxRequestBytes))
 	r.Use(chiMiddleware.Timeout(30 * time.Second))
 	if len(cfg.CORSAllowedOrigins) > 0 {
 		r.Use(middleware.CORS(cfg.CORSAllowedOrigins))
 	}
-	r.Use(httprate.LimitByIP(cfg.APILimitRequests, cfg.APILimitWindow))
 
 	// ── Health & readiness ─────────────────────────────────
+	// Outside the rate limiter: probes from a load balancer or orchestrator
+	// must not spend (or be refused by) the per-IP API budget.
 	r.Get("/health", livenessHandler())
 	r.Get("/ready", readinessHandler(pgPool, redisClient))
 
-	// ── Public routes ──────────────────────────────────────
 	r.Group(func(r chi.Router) {
-		// Stricter rate limit specifically for auth endpoints — protects
-		// against credential brute-force without throttling normal API use.
+		r.Use(httprate.LimitByIP(cfg.APILimitRequests, cfg.APILimitWindow))
+
+		// ── Public routes ──────────────────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(httprate.LimitByIP(cfg.AuthLimitRequests, cfg.AuthLimitWindow))
-			r.Post("/auth/register", authHandler.Register)
-			r.Post("/auth/login", authHandler.Login)
+			// Stricter rate limit specifically for auth endpoints — protects
+			// against credential brute-force without throttling normal API use.
+			r.Group(func(r chi.Router) {
+				r.Use(httprate.LimitByIP(cfg.AuthLimitRequests, cfg.AuthLimitWindow))
+				r.Post("/auth/register", authHandler.Register)
+				// Per-account limit as well, so an attack spread over many
+				// IPs is still capped for any single account.
+				r.With(httprate.Limit(cfg.AccountLimitRequests, cfg.AccountLimitWindow,
+					httprate.WithKeyFuncs(middleware.LoginAccountKey))).
+					Post("/auth/login", authHandler.Login)
+			})
+
+			r.Get("/events", eventHandler.List)
+			r.Get("/events/{id}", eventHandler.GetByID)
+			r.Get("/events/{eventID}/results", lotteryHandler.Results)
 		})
 
-		r.Get("/events", eventHandler.List)
-		r.Get("/events/{id}", eventHandler.GetByID)
-		r.Get("/events/{eventID}/results", lotteryHandler.Results)
-	})
-
-	// ── Authenticated routes ───────────────────────────────
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.Authenticate(cfg.JWTSecret))
-
-		r.Get("/auth/me", authHandler.Me)
-		r.Post("/events/{eventID}/book", bookingHandler.Book)
-		r.Get("/me/bookings", bookingHandler.MyBookings)
-
-		// ── Admin-only ──────────────────────────────────────
+		// ── Authenticated routes ───────────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.RequireAdmin)
+			r.Use(middleware.Authenticate(cfg.JWTSecret))
 
-			r.Post("/events", eventHandler.Create)
-			r.Put("/events/{id}/close", eventHandler.Close)
-			r.Put("/events/{id}/cancel", eventHandler.Cancel)
-			r.Get("/events/{eventID}/bookings", bookingHandler.ListByEvent)
-			r.Post("/events/{eventID}/draw", lotteryHandler.Draw)
-			r.Post("/admin/users/{id}/promote", authHandler.PromoteToAdmin)
+			r.Get("/auth/me", authHandler.Me)
+			r.Post("/events/{eventID}/book", bookingHandler.Book)
+			r.Get("/me/bookings", bookingHandler.MyBookings)
+
+			// ── Admin-only ──────────────────────────────────────
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireAdmin)
+
+				r.Post("/events", eventHandler.Create)
+				r.Put("/events/{id}/close", eventHandler.Close)
+				r.Put("/events/{id}/cancel", eventHandler.Cancel)
+				r.Get("/events/{eventID}/bookings", bookingHandler.ListByEvent)
+				r.Post("/events/{eventID}/draw", lotteryHandler.Draw)
+				r.Post("/admin/users/{id}/promote", authHandler.PromoteToAdmin)
+			})
 		})
 	})
 
@@ -175,6 +190,21 @@ func run() error {
 	}
 	log.Info().Msg("server stopped cleanly")
 	return nil
+}
+
+// migrate applies the embedded migrations over a short-lived pool, using
+// MIGRATION_DATABASE_URL (schema owner) when set, else DATABASE_URL.
+func migrate(ctx context.Context, cfg *config.Config) error {
+	url := cfg.MigrationDatabaseURL
+	if url == "" {
+		url = cfg.DatabaseURL
+	}
+	pool, err := db.NewPool(ctx, url, 2, 0)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	return db.RunMigrations(ctx, pool)
 }
 
 func configureLogger() {

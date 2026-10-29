@@ -20,6 +20,7 @@ var (
 	ErrEventAlreadyDrawn  = errors.New("event has already been drawn")
 	ErrEventCancelled     = errors.New("event has been cancelled")
 	ErrNoParticipants     = errors.New("no participants in the lottery pool")
+	ErrDrawNotDue         = errors.New("the event's draw time has not been reached")
 	ErrResultsUnavailable = errors.New("no draw results available for this event")
 )
 
@@ -27,10 +28,12 @@ const entropySource = "crypto/rand+fisher-yates"
 
 // Service orchestrates the lottery draw end-to-end:
 //  1. Lock the event row (SELECT ... FOR UPDATE) inside a transaction.
-//  2. Require status='closed' so no new bookings can arrive.
+//  2. Require status='closed' so no new bookings can arrive, and that the
+//     event's draw_at has passed (database clock).
 //  3. Fetch the participant pool inside the same transaction.
 //  4. Run a cryptographically fair Fisher–Yates selection.
-//  5. Insert audit-log rows and flip status='drawn'.
+//  5. Insert audit-log rows, seal them with a SHA-256 digest, and flip
+//     status='drawn'.
 //  6. Commit.
 //
 // Steps 1-6 happen in one transaction. Either everyone sees a fair draw
@@ -54,12 +57,13 @@ func (s *Service) RunDraw(ctx context.Context, eventID int64) (*models.DrawResul
 	// 1. Lock the event row.
 	var title, status string
 	var winnerCount int
+	var due bool
 	err = tx.QueryRow(ctx, `
-		SELECT title, status, winner_count
+		SELECT title, status, winner_count, draw_at <= now()
 		FROM events
 		WHERE id = $1
 		FOR UPDATE
-	`, eventID).Scan(&title, &status, &winnerCount)
+	`, eventID).Scan(&title, &status, &winnerCount, &due)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrEventNotFound
@@ -77,6 +81,9 @@ func (s *Service) RunDraw(ctx context.Context, eventID int64) (*models.DrawResul
 		return nil, ErrEventCancelled
 	default: // open
 		return nil, fmt.Errorf("%w (current status: %s)", ErrEventNotClosed, status)
+	}
+	if !due {
+		return nil, ErrDrawNotDue
 	}
 
 	// 3. Fetch participants under the same lock.
@@ -117,8 +124,9 @@ func (s *Service) RunDraw(ctx context.Context, eventID int64) (*models.DrawResul
 		Int("winner_count", len(winners)).
 		Msg("running lottery draw")
 
-	// 5. Persist audit log + flip status.
-	drawnAt := time.Now().UTC()
+	// 5. Persist audit log + flip status. Truncated to microseconds, the
+	// precision Postgres stores, so the digest recomputes identically.
+	drawnAt := time.Now().UTC().Truncate(time.Microsecond)
 	totalEntrants := len(participants)
 	winnerRecords := make([]models.LotteryDraw, 0, len(winners))
 	waitlistRecords := make([]models.LotteryDraw, 0, len(waitlist))
@@ -152,6 +160,14 @@ func (s *Service) RunDraw(ctx context.Context, eventID int64) (*models.DrawResul
 		waitlistRecords = append(waitlistRecords, d)
 	}
 
+	digest := drawDigest(eventID, winnerCount, drawnAt, append(append([]models.LotteryDraw(nil), winnerRecords...), waitlistRecords...))
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO lottery_draw_seals (event_id, digest, algorithm, sealed_at) VALUES ($1, $2, $3, $4)`,
+		eventID, digest, sealAlgorithm, drawnAt,
+	); err != nil {
+		return nil, fmt.Errorf("sealing draw: %w", err)
+	}
+
 	if _, err := tx.Exec(ctx,
 		`UPDATE events SET status = 'drawn' WHERE id = $1`, eventID,
 	); err != nil {
@@ -162,11 +178,15 @@ func (s *Service) RunDraw(ctx context.Context, eventID int64) (*models.DrawResul
 		return nil, fmt.Errorf("commit draw tx: %w", err)
 	}
 
-	log.Info().
+	// Logged at warn so the seal reaches log storage even at LOG_LEVEL=warn:
+	// an off-database copy of the digest is what makes later tampering by a
+	// database superuser detectable.
+	log.Warn().
 		Int64("event_id", eventID).
 		Int("winners", len(winnerRecords)).
 		Int("waitlist", len(waitlistRecords)).
-		Msg("lottery draw completed")
+		Str("digest", digest).
+		Msg("lottery draw sealed")
 
 	return &models.DrawResult{
 		EventID:       eventID,
@@ -175,6 +195,8 @@ func (s *Service) RunDraw(ctx context.Context, eventID int64) (*models.DrawResul
 		Winners:       winnerRecords,
 		Waitlist:      waitlistRecords,
 		DrawnAt:       drawnAt,
+		Digest:        digest,
+		Integrity:     IntegrityVerified,
 	}, nil
 }
 
@@ -232,6 +254,26 @@ func (s *Service) GetResults(ctx context.Context, eventID int64) (*models.DrawRe
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating draw rows: %w", err)
+	}
+	rows.Close()
+
+	var sealed string
+	err = s.db.QueryRow(ctx, `SELECT digest FROM lottery_draw_seals WHERE event_id = $1`, eventID).Scan(&sealed)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		result.Integrity = IntegrityUnsealed
+	case err != nil:
+		return nil, fmt.Errorf("fetching draw seal: %w", err)
+	default:
+		result.Digest = sealed
+		all := append(append([]models.LotteryDraw(nil), result.Winners...), result.Waitlist...)
+		if drawDigest(eventID, winnerCount, result.DrawnAt, all) == sealed {
+			result.Integrity = IntegrityVerified
+		} else {
+			result.Integrity = IntegrityMismatch
+			log.Error().Int64("event_id", eventID).Str("sealed_digest", sealed).
+				Msg("lottery draw does not match its seal: audit rows were altered")
+		}
 	}
 	return result, nil
 }

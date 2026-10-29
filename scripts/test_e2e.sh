@@ -72,7 +72,10 @@ RESP=$(call GET /auth/me "$USER_TOKEN")
 
 # ── 7. Create event ─────────────────────────────────────────
 log "7. create event"
-DRAW_AT=$(python3 -c "from datetime import datetime,timedelta,timezone; print((datetime.now(timezone.utc)+timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'))")
+# Draws are refused until draw_at has passed, so schedule it a few seconds out.
+DRAW_DELAY="${DRAW_DELAY:-8}"
+DRAW_AT_EPOCH=$(( $(date +%s) + DRAW_DELAY ))
+DRAW_AT=$(python3 -c "from datetime import datetime,timezone; print(datetime.fromtimestamp($DRAW_AT_EPOCH, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))")
 RESP=$(call POST /events "$ADMIN_TOKEN" "{\"title\":\"E2E Event $TS\",\"description\":\"win a spot\",\"capacity\":5,\"draw_at\":\"$DRAW_AT\",\"winner_count\":2}")
 EVENT_ID=$(j "$RESP" '.data.id')
 [[ -n "$EVENT_ID" && "$EVENT_ID" != "null" ]] && ok "event $EVENT_ID" || { fail "create event" "$RESP"; exit 1; }
@@ -113,7 +116,8 @@ RESP=$(call POST "/events/${EVENT_ID}/book" "$USER_TOKEN")
 [[ "$(j "$RESP" '.success')" == "false" ]] && ok "rejected" || fail "post-close booking" "$RESP"
 
 # ── 15. Draw ────────────────────────────────────────────────
-log "15. draw"
+log "15. draw (after draw_at)"
+while (( $(date +%s) <= DRAW_AT_EPOCH )); do sleep 1; done
 RESP=$(call POST "/events/${EVENT_ID}/draw" "$ADMIN_TOKEN")
 ENTROPY=$(j "$RESP" '.data.winners[0].entropy_source')
 TOTAL=$(j "$RESP" '.data.total_entrants')

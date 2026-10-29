@@ -27,11 +27,14 @@ const (
 
 // Service holds event business logic.
 type Service struct {
-	db *pgxpool.Pool
+	db         *pgxpool.Pool
+	maxWinners int
 }
 
-func NewService(db *pgxpool.Pool) *Service {
-	return &Service{db: db}
+// NewService builds the event service. maxWinners caps winner_count per
+// event (MAX_WINNERS); 0 or less means no cap.
+func NewService(db *pgxpool.Pool, maxWinners int) *Service {
+	return &Service{db: db, maxWinners: maxWinners}
 }
 
 // Create validates input and inserts a new event in 'open' status.
@@ -62,6 +65,9 @@ func (s *Service) Create(ctx context.Context, req models.CreateEventRequest, cre
 	}
 	if req.WinnerCount > req.Capacity {
 		return nil, fmt.Errorf("%w: winner_count cannot exceed capacity", ErrInvalidInput)
+	}
+	if s.maxWinners > 0 && req.WinnerCount > s.maxWinners {
+		return nil, fmt.Errorf("%w: winner_count cannot exceed %d", ErrInvalidInput, s.maxWinners)
 	}
 
 	var event models.Event
