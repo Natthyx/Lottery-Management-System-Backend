@@ -1,0 +1,53 @@
+## date
+2026-10-29T17:38:30Z
+## git
+8cd482e2430867bf51bdaac236692bb97e5b3780
+?? Agent.md
+?? loadtest/
+## host
+ProductName:		macOS
+ProductVersion:		26.3
+BuildVersion:		25D125
+Apple M2
+8
+8589934592
+## docker
+client=28.5.1 server=28.5.1
+docker_desktop_vm_cpus=8 docker_desktop_vm_mem_bytes=8322969600 os=Docker Desktop kernel=6.10.14-linuxkit
+Docker Compose version v2.40.2-desktop.1
+## k6
+k6 v2.3.0 (commit/devel, go1.27.1, darwin/arm64)
+## go (host, for helpers)
+go version go1.26.3 darwin/arm64
+## app build image
+FROM golang:1.22-alpine AS builder
+## postgres
+PostgreSQL 16.15 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+100
+## redis
+Redis server v=7.4.12 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=2d3dd1569b92d75e
+## app env (secrets redacted)
+
+API_RATE_LIMIT_REQUESTS=10000000
+API_RATE_LIMIT_WINDOW=1m
+AUTH_RATE_LIMIT_REQUESTS=10000000
+AUTH_RATE_LIMIT_WINDOW=1m
+BOOTSTRAP_ADMIN_EMAIL=lt-admin@loadtest.local
+BOOTSTRAP_ADMIN_NAME=Loadtest-Admin
+BOOTSTRAP_ADMIN_PASSWORD=<redacted>
+CORS_ALLOWED_ORIGINS=
+DATABASE_URL=<redacted>
+ENV=production
+JWT_EXPIRY=24h
+JWT_SECRET=<redacted>
+LOG_LEVEL=warn
+MIGRATE_ON_START=true
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PORT=8080
+PRETTY=false
+REDIS_URL=redis://redis:6379/0
+SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+## container resource limits (0 = none)
+lt_app nano_cpus=0 memory=0
+lt_postgres nano_cpus=0 memory=0
+lt_redis nano_cpus=0 memory=0

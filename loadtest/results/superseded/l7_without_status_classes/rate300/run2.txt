@@ -1,0 +1,30 @@
+testRunDurationMs=60003.772
+data_received: count=1041251021 rate=17353092.752
+data_received{ep:get}: count=2952000 rate=49196.907
+data_received{ep:list}: count=29704950 rate=495051.378
+data_received{ep:results}: count=1008594071 rate=16808844.467
+data_sent: count=1458164 rate=24301.206
+dropped_iterations: count=0 rate=0
+http_req_blocked: p(99)=0.107 max=4.609 count=18002 min=0.001 med=0.006 avg=0.01 p(90)=0.009 p(95)=0.011
+http_req_connecting: p(90)=0 p(95)=0 p(99)=0 max=3.878 count=18002 min=0 med=0 avg=0.002
+http_req_duration: p(99)=10.44 max=195.798 count=18002 min=0.491 med=1.806 avg=2.61 p(90)=3.601 p(95)=4.601
+http_req_duration{ep:get}: p(95)=2.241 p(99)=6.418 max=175.842 count=6000 min=0.491 med=1.001 avg=1.574 p(90)=1.75
+http_req_duration{ep:list}: p(95)=3.624 p(99)=8.875 max=178.393 count=6001 min=0.864 med=1.594 avg=2.398 p(90)=2.997
+http_req_duration{ep:results}: max=195.798 count=6001 min=1.605 med=2.878 avg=3.858 p(90)=4.722 p(95)=6.329 p(99)=12.074
+http_req_duration{expected_response:true}: avg=2.61 p(90)=3.601 p(95)=4.601 p(99)=10.44 max=195.798 count=18002 min=0.491 med=1.806
+http_req_failed: rate=0 passes=0 fails=18002
+http_req_failed{ep:get}: rate=0 passes=0 fails=6000
+http_req_failed{ep:list}: fails=6001 rate=0 passes=0
+http_req_failed{ep:results}: passes=0 fails=6001 rate=0
+http_req_receiving: p(95)=0.63 p(99)=3.521 max=24.663 count=18002 min=0.011 med=0.039 avg=0.252 p(90)=0.473
+http_req_sending: count=18002 min=0.003 med=0.016 avg=0.02 p(90)=0.026 p(95)=0.034 p(99)=0.086 max=2.625
+http_req_tls_handshaking: p(95)=0 p(99)=0 max=0 count=18002 min=0 med=0 avg=0 p(90)=0
+http_req_waiting: count=18002 min=0.456 med=1.707 avg=2.338 p(90)=3.072 p(95)=3.826 p(99)=8.542 max=183.271
+http_reqs: count=18002 rate=300.014
+http_reqs{ep:get}: count=6000 rate=99.994
+http_reqs{ep:list}: count=6001 rate=100.01
+http_reqs{ep:results}: rate=100.01 count=6001
+iteration_duration: count=18002 min=0.558 med=1.955 avg=2.754 p(90)=3.764 p(95)=4.8 p(99)=10.66 max=195.885
+iterations: count=18002 rate=300.014
+vus: value=0 min=0 max=41
+vus_max: value=150 min=150 max=150

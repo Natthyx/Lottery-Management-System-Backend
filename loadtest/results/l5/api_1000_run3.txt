@@ -1,0 +1,9 @@
+source=api (POST /events, /book x10, /close, /draw) participants=10 winners_per_draw=5 draws=1000 elapsed_s=3.6
+participants are booked in index order 0..k-1 for every event (index 0 = earliest booked_at)
+transport_errors_retried=0 (requests that got no HTTP response; details on stderr)
+win frequency, textbook Pearson: chi2=3.8880 df=9 p=0.9186 expected_per_cell=500.0 observed=[476 508 525 506 494 486 487 508 497 513]
+  note: assumes multinomial cells; conservative here because each draw picks distinct winners
+win frequency, variance-adjusted: chi2=6.9984 df=9 p=0.6373 expected_per_cell=500.0 observed=[476 508 525 506 494 486 487 508 497 513]
+  note: divides by the exact null variance of a uniform k-subset draw; asymptotically chi2(k-1)
+rank-1 frequency: chi2=6.0800 df=9 p=0.7319 expected_per_cell=100.0 observed=[106 96 94 111 92 97 111 87 106 100]
+  note: one count per draw; multinomial assumption holds

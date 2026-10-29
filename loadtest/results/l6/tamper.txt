@@ -1,0 +1,150 @@
+SELECT 'baseline' AS step, count(*) AS rows, md5(string_agg(id || ':' || winner_user_id || ':' || draw_rank, ',' ORDER BY id)) AS digest
+FROM lottery_draws;
+   step   | rows |              digest              
+----------+------+----------------------------------
+ baseline | 1000 | 83845ee07095bfe16a1aa64d9dd96ceb
+(1 row)
+
+SELECT 'A: as app role' AS step, current_user;
+      step      | current_user 
+----------------+--------------
+ A: as app role | lottery
+(1 row)
+
+BEGIN;
+BEGIN
+UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
+UPDATE 1
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+DELETE FROM lottery_draws WHERE id = (SELECT min(id) FROM lottery_draws);
+DELETE 1
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+TRUNCATE lottery_draws;
+TRUNCATE TABLE
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+WITH ev AS (SELECT min(event_id) AS event_id FROM lottery_draws),
+     r1 AS (SELECT d.id, d.winner_user_id FROM lottery_draws d, ev WHERE d.event_id = ev.event_id AND d.draw_rank = 1),
+     rn AS (SELECT d.id, d.winner_user_id FROM lottery_draws d, ev WHERE d.event_id = ev.event_id
+            ORDER BY d.draw_rank DESC LIMIT 1)
+UPDATE lottery_draws t
+SET winner_user_id = CASE WHEN t.id = r1.id THEN rn.winner_user_id ELSE r1.winner_user_id END
+FROM r1, rn
+WHERE t.id IN (r1.id, rn.id);
+UPDATE 2
+SELECT 'A: rank-1 winner after swap (inside tx)' AS step, event_id, draw_rank, winner_user_id
+FROM lottery_draws WHERE event_id = (SELECT min(event_id) FROM lottery_draws) AND draw_rank = 1;
+                  step                   | event_id | draw_rank | winner_user_id 
+-----------------------------------------+----------+-----------+----------------
+ A: rank-1 winner after swap (inside tx) |        1 |         1 |            635
+(1 row)
+
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+CREATE ROLE lt_tmp_owner NOLOGIN NOSUPERUSER;
+CREATE ROLE
+ALTER TABLE lottery_draws OWNER TO lt_tmp_owner;
+ALTER TABLE
+SET LOCAL ROLE lt_tmp_owner;
+SET
+SELECT 'B: as non-superuser owner' AS step, current_user, (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS is_super;
+           step            | current_user | is_super 
+---------------------------+--------------+----------
+ B: as non-superuser owner | lt_tmp_owner | f
+(1 row)
+
+SAVEPOINT s1;
+SAVEPOINT
+UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
+UPDATE 1
+ROLLBACK TO SAVEPOINT s1;
+ROLLBACK
+DELETE FROM lottery_draws WHERE id = (SELECT min(id) FROM lottery_draws);
+DELETE 1
+ROLLBACK TO SAVEPOINT s1;
+ROLLBACK
+ROLLBACK;
+ROLLBACK
+BEGIN;
+BEGIN
+CREATE ROLE lt_tmp_app NOLOGIN NOSUPERUSER;
+CREATE ROLE
+GRANT SELECT, INSERT ON lottery_draws TO lt_tmp_app;
+GRANT
+SET LOCAL ROLE lt_tmp_app;
+SET
+SELECT 'C: as non-owner with SELECT,INSERT' AS step, current_user;
+                step                | current_user 
+------------------------------------+--------------
+ C: as non-owner with SELECT,INSERT | lt_tmp_app
+(1 row)
+
+SAVEPOINT s1;
+SAVEPOINT
+UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
+ERROR:  42501: permission denied for table lottery_draws
+LOCATION:  aclcheck_error, aclchk.c:2812
+ROLLBACK TO SAVEPOINT s1;
+ROLLBACK
+DELETE FROM lottery_draws WHERE id = (SELECT min(id) FROM lottery_draws);
+ROLLBACK TO SAVEPOINT s1;
+ERROR:  42501: permission denied for table lottery_draws
+LOCATION:  aclcheck_error, aclchk.c:2812
+ROLLBACK
+ROLLBACK;
+ROLLBACK
+SELECT 'D: acl' AS step, relacl FROM pg_class WHERE relname = 'lottery_draws';
+  step  |          relacl           
+--------+---------------------------
+ D: acl | {lottery=arwdDxt/lottery}
+(1 row)
+
+BEGIN;
+BEGIN
+CREATE TABLE lt_tmp_control (id int);
+CREATE TABLE
+INSERT INTO lt_tmp_control VALUES (1);
+INSERT 0 1
+CREATE ROLE lt_tmp_app2 NOLOGIN NOSUPERUSER;
+CREATE ROLE
+GRANT SELECT, INSERT ON lt_tmp_control TO lt_tmp_app2;
+GRANT
+SET LOCAL ROLE lt_tmp_app2;
+SET
+SELECT 'E: control table without REVOKE, non-owner with SELECT,INSERT' AS step, current_user;
+                             step                              | current_user 
+---------------------------------------------------------------+--------------
+ E: control table without REVOKE, non-owner with SELECT,INSERT | lt_tmp_app2
+(1 row)
+
+SAVEPOINT s1;
+SAVEPOINT
+UPDATE lt_tmp_control SET id = 2;
+ERROR:  42501: permission denied for table lt_tmp_control
+LOCATION:  aclcheck_error, aclchk.c:2812
+ROLLBACK TO SAVEPOINT s1;
+ROLLBACK
+DELETE FROM lt_tmp_control;
+ROLLBACK TO SAVEPOINT s1;
+ROLLBACK
+ROLLBACK;
+ERROR:  42501: permission denied for table lt_tmp_control
+LOCATION:  aclcheck_error, aclchk.c:2812
+ROLLBACK
+SELECT 'after' AS step, count(*) AS rows, md5(string_agg(id || ':' || winner_user_id || ':' || draw_rank, ',' ORDER BY id)) AS digest
+FROM lottery_draws;
+ step  | rows |              digest              
+-------+------+----------------------------------
+ after | 1000 | 83845ee07095bfe16a1aa64d9dd96ceb
+(1 row)
+

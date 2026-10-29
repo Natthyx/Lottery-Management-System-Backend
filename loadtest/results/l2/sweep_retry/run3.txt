@@ -1,0 +1,150 @@
+testRunDurationMs=88289.03
+book_201_duration: p(95)=2.987 p(99)=6.21 max=200.38 count=66700 min=0.543 med=0.826 avg=1.284 p(90)=2.242
+book_201_duration{stage:c100}: med=1.362 avg=1.562 p(90)=2.21 p(95)=2.673 p(99)=4.952 max=42.879 count=9625 min=0.563
+book_201_duration{stage:c10}: count=9868 min=0.564 med=0.765 avg=1.016 p(90)=1.301 p(95)=1.878 p(99)=5.354 max=57.354
+book_201_duration{stage:c1}: p(99)=2.332 max=32.932 count=10305 min=0.543 med=0.73 avg=0.818 p(90)=0.954 p(95)=1.225
+book_201_duration{stage:c200}: p(99)=16.343 max=47.23 count=5896 min=0.61 med=2.56 avg=3.113 p(90)=4.45 p(95)=5.903
+book_201_duration{stage:c25}: max=200.38 count=11333 min=0.559 med=0.771 avg=1.006 p(90)=1.304 p(95)=1.808 p(99)=4.035
+book_201_duration{stage:c50}: p(95)=3.211 p(99)=9.097 max=65.818 count=8859 min=0.583 med=1.031 avg=1.502 p(90)=2.303
+book_201_duration{stage:c5}: min=0.556 med=0.726 avg=0.838 p(90)=0.969 p(95)=1.246 p(99)=2.45 max=37.401 count=10814
+book_attempts: count=66700 min=1 med=1 avg=4.453 p(90)=11 p(95)=18 p(99)=46 max=126
+book_attempts{stage:c100}: avg=7.374 p(90)=16 p(95)=20 p(99)=32 max=69 count=9625 min=1 med=5
+book_attempts{stage:c10}: max=18 count=9868 min=1 med=1 avg=1.557 p(90)=3 p(95)=4 p(99)=7
+book_attempts{stage:c1}: max=1 count=10305 min=1 med=1 avg=1 p(90)=1 p(95)=1 p(99)=1
+book_attempts{stage:c200}: p(99)=87 max=126 count=5896 min=1 med=15 avg=20.923 p(90)=48 p(95)=60
+book_attempts{stage:c25}: med=1 avg=2.284 p(90)=5 p(95)=7 p(99)=11 max=28 count=11333 min=1
+book_attempts{stage:c50}: p(99)=21 max=49 count=8859 min=1 med=3 avg=4.271 p(90)=10 p(95)=13
+book_attempts{stage:c5}: min=1 med=1 avg=1.232 p(90)=2 p(95)=3 p(99)=5 max=10 count=10814
+book_end_to_end_duration: p(90)=163 p(95)=296 p(99)=767 max=2108 count=66700 min=0 med=1 avg=59.072
+book_end_to_end_duration{stage:c100}: p(99)=499.52 max=1190 count=9625 min=0 med=72 avg=104.207 p(90)=247 p(95)=318
+book_end_to_end_duration{stage:c10}: avg=10.102 p(90)=36 p(95)=57 p(99)=107 max=358 count=9868 min=0 med=1
+book_end_to_end_duration{stage:c1}: p(99)=3 max=33 count=10305 min=0 med=1 avg=0.928 p(90)=1 p(95)=2
+book_end_to_end_duration{stage:c200}: p(99)=1474.05 max=2108 count=5896 min=1 med=247 avg=343.944 p(90)=794 p(95)=1004
+book_end_to_end_duration{stage:c25}: p(90)=67 p(95)=96 p(99)=167.68 max=675 count=11333 min=0 med=1 avg=22.03
+book_end_to_end_duration{stage:c50}: avg=56.525 p(90)=150 p(95)=210 p(99)=346.84 max=822 count=8859 min=0 med=29
+book_end_to_end_duration{stage:c5}: p(95)=27 p(99)=69.87 max=170 count=10814 min=0 med=1 avg=4.584 p(90)=12
+data_received: count=84946972 rate=962146.396
+data_sent: count=110324422 rate=1249582.445
+http_req_blocked: max=24.037 count=297036 min=0 med=0.001 avg=0.004 p(90)=0.003 p(95)=0.004 p(99)=0.009
+http_req_connecting: max=23.894 count=297036 min=0 med=0 avg=0.002 p(90)=0 p(95)=0 p(99)=0
+http_req_duration: min=0.187 med=0.821 avg=1.475 p(90)=2.398 p(95)=4.267 p(99)=13.921 max=200.38 count=297036
+http_req_duration{expected_response:true}: p(95)=2.987 p(99)=6.21 max=200.38 count=66700 min=0.543 med=0.826 avg=1.284 p(90)=2.242
+http_req_duration{stage:c100}: count=70972 min=0.187 med=0.663 avg=1.027 p(90)=1.637 p(95)=2.286 p(99)=7.395 max=42.879
+http_req_duration{stage:c10}: count=15362 min=0.223 med=0.717 avg=0.969 p(90)=1.311 p(95)=2.041 p(99)=7.229 max=57.354
+http_req_duration{stage:c1}: p(90)=0.954 p(95)=1.225 p(99)=2.332 max=32.932 count=10305 min=0.543 med=0.73 avg=0.818
+http_req_duration{stage:c200}: p(90)=3.603 p(95)=6.445 p(99)=16.964 max=47.23 count=123360 min=0.191 med=1.106 avg=1.992
+http_req_duration{stage:c25}: p(99)=8.815 max=200.38 count=25883 min=0.213 med=0.646 avg=1.029 p(90)=1.225 p(95)=1.868
+http_req_duration{stage:c50}: p(99)=20.882 max=65.818 count=37835 min=0.2 med=0.728 avg=1.562 p(90)=2.366 p(95)=4.953
+http_req_duration{stage:c5}: p(99)=3.015 max=37.401 count=13319 min=0.221 med=0.705 avg=0.791 p(90)=0.943 p(95)=1.236
+http_req_failed: passes=230336 fails=66700 rate=0.775
+http_req_receiving: p(99)=0.057 max=7.603 count=297036 min=0.003 med=0.007 avg=0.013 p(90)=0.026 p(95)=0.036
+http_req_sending: max=16.98 count=297036 min=0.001 med=0.003 avg=0.007 p(90)=0.012 p(95)=0.017 p(99)=0.032
+http_req_tls_handshaking: min=0 med=0 avg=0 p(90)=0 p(95)=0 p(99)=0 max=0 count=297036
+http_req_waiting: count=297036 min=0.178 med=0.802 avg=1.456 p(90)=2.376 p(95)=4.239 p(99)=13.891 max=200.348
+http_reqs: count=297036 rate=3364.359
+http_reqs{stage:c100}: count=70972 rate=803.86
+http_reqs{stage:c10}: rate=173.997 count=15362
+http_reqs{stage:c1}: count=10305 rate=116.719
+http_reqs{stage:c200}: count=123360 rate=1397.229
+http_reqs{stage:c25}: count=25883 rate=293.162
+http_reqs{stage:c50}: count=37835 rate=428.536
+http_reqs{stage:c5}: count=13319 rate=150.857
+iteration_duration: count=66700 min=0.575 med=1.184 avg=59.099 p(90)=163.128 p(95)=295.583 p(99)=766.888 max=2107.871
+iterations: count=66700 rate=755.473
+iterations{stage:c100}: count=9625 rate=109.017
+iterations{stage:c10}: count=9868 rate=111.769
+iterations{stage:c1}: rate=116.719 count=10305
+iterations{stage:c200}: count=5896 rate=66.781
+iterations{stage:c25}: count=11333 rate=128.362
+iterations{stage:c50}: count=8859 rate=100.341
+iterations{stage:c5}: count=10814 rate=122.484
+st_201: count=66700 rate=755.473
+st_201{stage:c100}: count=9625 rate=109.017
+st_201{stage:c10}: count=9868 rate=111.769
+st_201{stage:c1}: count=10305 rate=116.719
+st_201{stage:c200}: count=5896 rate=66.781
+st_201{stage:c25}: count=11333 rate=128.362
+st_201{stage:c50}: count=8859 rate=100.341
+st_201{stage:c5}: count=10814 rate=122.484
+st_409_already_booked: count=0 rate=0
+st_409_already_booked{stage:c100}: count=0 rate=0
+st_409_already_booked{stage:c10}: count=0 rate=0
+st_409_already_booked{stage:c1}: rate=0 count=0
+st_409_already_booked{stage:c200}: count=0 rate=0
+st_409_already_booked{stage:c25}: count=0 rate=0
+st_409_already_booked{stage:c50}: count=0 rate=0
+st_409_already_booked{stage:c5}: count=0 rate=0
+st_409_busy: rate=2608.886 count=230336
+st_409_busy{stage:c100}: rate=694.843 count=61347
+st_409_busy{stage:c10}: count=5494 rate=62.227
+st_409_busy{stage:c1}: count=0 rate=0
+st_409_busy{stage:c200}: count=117464 rate=1330.448
+st_409_busy{stage:c25}: count=14550 rate=164.8
+st_409_busy{stage:c50}: count=28976 rate=328.195
+st_409_busy{stage:c5}: count=2505 rate=28.373
+st_409_full: count=0 rate=0
+st_409_full{stage:c100}: count=0 rate=0
+st_409_full{stage:c10}: count=0 rate=0
+st_409_full{stage:c1}: count=0 rate=0
+st_409_full{stage:c200}: count=0 rate=0
+st_409_full{stage:c25}: count=0 rate=0
+st_409_full{stage:c50}: count=0 rate=0
+st_409_full{stage:c5}: count=0 rate=0
+st_409_not_open: count=0 rate=0
+st_409_not_open{stage:c100}: count=0 rate=0
+st_409_not_open{stage:c10}: rate=0 count=0
+st_409_not_open{stage:c1}: count=0 rate=0
+st_409_not_open{stage:c200}: count=0 rate=0
+st_409_not_open{stage:c25}: count=0 rate=0
+st_409_not_open{stage:c50}: count=0 rate=0
+st_409_not_open{stage:c5}: count=0 rate=0
+st_409_other: count=0 rate=0
+st_409_other{stage:c100}: count=0 rate=0
+st_409_other{stage:c10}: count=0 rate=0
+st_409_other{stage:c1}: count=0 rate=0
+st_409_other{stage:c200}: count=0 rate=0
+st_409_other{stage:c25}: count=0 rate=0
+st_409_other{stage:c50}: count=0 rate=0
+st_409_other{stage:c5}: rate=0 count=0
+st_429: count=0 rate=0
+st_429{stage:c100}: count=0 rate=0
+st_429{stage:c10}: count=0 rate=0
+st_429{stage:c1}: count=0 rate=0
+st_429{stage:c200}: count=0 rate=0
+st_429{stage:c25}: rate=0 count=0
+st_429{stage:c50}: rate=0 count=0
+st_429{stage:c5}: count=0 rate=0
+st_5xx: count=0 rate=0
+st_5xx{stage:c100}: count=0 rate=0
+st_5xx{stage:c10}: count=0 rate=0
+st_5xx{stage:c1}: count=0 rate=0
+st_5xx{stage:c200}: count=0 rate=0
+st_5xx{stage:c25}: count=0 rate=0
+st_5xx{stage:c50}: count=0 rate=0
+st_5xx{stage:c5}: rate=0 count=0
+st_network_error: count=0 rate=0
+st_network_error{stage:c100}: count=0 rate=0
+st_network_error{stage:c10}: count=0 rate=0
+st_network_error{stage:c1}: count=0 rate=0
+st_network_error{stage:c200}: count=0 rate=0
+st_network_error{stage:c25}: count=0 rate=0
+st_network_error{stage:c50}: count=0 rate=0
+st_network_error{stage:c5}: count=0 rate=0
+st_other: count=0 rate=0
+st_other{stage:c100}: count=0 rate=0
+st_other{stage:c10}: count=0 rate=0
+st_other{stage:c1}: count=0 rate=0
+st_other{stage:c200}: rate=0 count=0
+st_other{stage:c25}: rate=0 count=0
+st_other{stage:c50}: count=0 rate=0
+st_other{stage:c5}: count=0 rate=0
+st_timeout: count=0 rate=0
+st_timeout{stage:c100}: rate=0 count=0
+st_timeout{stage:c10}: count=0 rate=0
+st_timeout{stage:c1}: rate=0 count=0
+st_timeout{stage:c200}: count=0 rate=0
+st_timeout{stage:c25}: count=0 rate=0
+st_timeout{stage:c50}: count=0 rate=0
+st_timeout{stage:c5}: count=0 rate=0
+vus: min=0 max=200 value=200
+vus_max: value=375 min=375 max=375

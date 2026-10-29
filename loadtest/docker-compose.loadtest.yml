@@ -1,0 +1,41 @@
+# Load-test override. Use together with the base file:
+#
+#   docker compose -p lottery-loadtest \
+#     -f docker-compose.yml -f loadtest/docker-compose.loadtest.yml up -d --build
+#
+# What this changes, and why:
+#
+#   * Isolation only (no effect on application behaviour): a separate compose
+#     project name (set by run.sh), separate container names, no published
+#     Postgres/Redis ports, and the app bound to 127.0.0.1:${LT_PORT:-18080}.
+#     The Postgres volume therefore becomes lottery-loadtest_postgres_data and
+#     can never be confused with a developer's lottery_* stack.
+#   * Configuration via env vars the app already reads (internal/config/config.go):
+#       API_RATE_LIMIT_REQUESTS / API_RATE_LIMIT_WINDOW
+#       AUTH_RATE_LIMIT_REQUESTS / AUTH_RATE_LIMIT_WINDOW
+#       LOG_LEVEL
+#     The base docker-compose.yml does not forward the two *_WINDOW variables,
+#     so they are added here. The LT_* defaults below are the RAISED test
+#     values; run.sh sets them back to the code defaults for scenario L8.
+#
+# Nothing else is overridden. JWT_SECRET and BOOTSTRAP_ADMIN_* come from the
+# environment that run.sh generates at test time.
+services:
+  postgres:
+    container_name: lt_postgres
+    ports: !reset []
+
+  redis:
+    container_name: lt_redis
+    ports: !reset []
+
+  app:
+    container_name: lt_app
+    ports: !override
+      - "127.0.0.1:${LT_PORT:-18080}:8080"
+    environment:
+      LOG_LEVEL: "${LT_LOG_LEVEL:-warn}"
+      API_RATE_LIMIT_REQUESTS: "${LT_API_RATE_LIMIT_REQUESTS:-10000000}"
+      API_RATE_LIMIT_WINDOW: "${LT_API_RATE_LIMIT_WINDOW:-1m}"
+      AUTH_RATE_LIMIT_REQUESTS: "${LT_AUTH_RATE_LIMIT_REQUESTS:-10000000}"
+      AUTH_RATE_LIMIT_WINDOW: "${LT_AUTH_RATE_LIMIT_WINDOW:-1m}"

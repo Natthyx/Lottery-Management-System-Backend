@@ -1,0 +1,4 @@
+{
+  "description": "L9 graceful shutdown: 50 VUs closed-loop booking across 50 events for 20 s; SIGTERM sent to the app at ~6 s.",
+  "stage_seconds": 0
+}

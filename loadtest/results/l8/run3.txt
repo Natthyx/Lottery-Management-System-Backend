@@ -1,0 +1,20 @@
+readiness: 1 successful GET /health probe (counts against the general limit)
+## A. general API limit (100/min): 120 sequential GET /events from one IP; 1 request already used by the probe
+  99 200
+  21 429
+first_429_at_request=100
+## A2. one more GET /events, headers
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+X-Ratelimit-Limit: 100
+X-Ratelimit-Remaining: 0
+X-Ratelimit-Reset: 1793298780
+## A3. same request with a spoofed X-Forwarded-For (RealIP middleware runs before the limiter)
+   3 200
+readiness: 1 successful GET /health probe (counts against the general limit)
+## B. auth limit: 15 sequential POST /auth/login with body {} (401 without running bcrypt)
+  10 401
+   5 429
+first_429_at_request=11
+## B2. same with a spoofed X-Real-IP
+   3 401

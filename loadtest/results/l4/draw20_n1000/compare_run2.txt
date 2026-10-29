@@ -1,0 +1,4 @@
+lines: db=    1000 api_results=    1000 post_response=    1000
+db vs GET /results: IDENTICAL
+db vs POST /draw 200 body: IDENTICAL
+winners in GET /results: 100  waitlist: 900
