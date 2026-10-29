@@ -36,7 +36,7 @@ var transportErrors atomic.Int64
 // call sends one request and decodes the JSON body into out. On a transport
 // error (no HTTP response) it retries up to 5 times. Callers handle the case
 // where the lost attempt had in fact been applied (book: 409 "already
-// booked"; close: idempotent; draw: 409 "already been drawn").
+// booked"; close: idempotent; draw: 409 "already_drawn").
 func call(method, url, token, body string, out any) (int, error) {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
@@ -70,6 +70,7 @@ type apiError struct {
 }
 
 type drawResp struct {
+	Code string `json:"code"`
 	Data struct {
 		Winners []struct {
 			WinnerUserID int64 `json:"winner_user_id"`
@@ -84,7 +85,9 @@ func oneDraw(base string, t *tokens, k, w int) (winners []int64, err error) {
 	var ev struct {
 		Data struct{ ID int64 } `json:"data"`
 	}
-	drawAt := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	// Draws are refused until draw_at, so schedule it just ahead and wait.
+	due := time.Now().Add(1500 * time.Millisecond)
+	drawAt := due.UTC().Format(time.RFC3339Nano)
 	code, err := call("POST", base+"/events", t.Admin,
 		fmt.Sprintf(`{"title":"fairness","capacity":%d,"winner_count":%d,"draw_at":%q}`, k, w, drawAt), &ev)
 	if err != nil || code != http.StatusCreated {
@@ -109,9 +112,18 @@ func oneDraw(base string, t *tokens, k, w int) (winners []int64, err error) {
 	if code, err = call("PUT", fmt.Sprintf("%s/events/%d/close", base, ev.Data.ID), t.Admin, "", nil); err != nil || code != http.StatusOK {
 		return nil, fmt.Errorf("close: %d %v", code, err)
 	}
+	time.Sleep(time.Until(due) + 100*time.Millisecond)
 	var dr drawResp
-	code, err = call("POST", fmt.Sprintf("%s/events/%d/draw", base, ev.Data.ID), t.Admin, "", &dr)
-	if err == nil && code == http.StatusConflict {
+	for attempt := 0; ; attempt++ {
+		dr = drawResp{}
+		code, err = call("POST", fmt.Sprintf("%s/events/%d/draw", base, ev.Data.ID), t.Admin, "", &dr)
+		// Host and database clocks can differ by a few ms.
+		if err != nil || code != http.StatusConflict || dr.Code != "draw_not_due" || attempt > 20 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err == nil && code == http.StatusConflict && dr.Code == "already_drawn" {
 		// Only reachable if an earlier attempt of this draw was applied but
 		// its response was lost; read the committed result instead.
 		dr = drawResp{}

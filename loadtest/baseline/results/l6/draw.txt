@@ -1,0 +1,1 @@
+{"success":true,"winners":100,"waitlist":900}

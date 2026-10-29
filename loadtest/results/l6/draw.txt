@@ -1,1 +1,1 @@
-{"success":true,"winners":100,"waitlist":900}
+{"success":true,"winners":100,"waitlist":900,"digest":"09add8c43e494fc0dcc0dba2de1fd57a4952a253231f039f8f543d354fdb6857"}

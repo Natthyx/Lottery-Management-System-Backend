@@ -1,4 +1,4 @@
 {
-  "description": "L2b-unbounded hot event, N=200 users, VUs=200, shared-iterations, client retries busy-409 until a non-busy answer (5-25 ms jitter, cap 100000 attempts). Capacity 100.",
+  "description": "L2b-unbounded hot event, N=200 users, VUs=200, shared-iterations, client retries busy-503 until a non-busy answer (5-25 ms jitter, cap 100000 attempts). Capacity 100.",
   "stage_seconds": 0
 }

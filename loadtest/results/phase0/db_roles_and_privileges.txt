@@ -1,63 +1,69 @@
-SELECT current_user, session_user;
- current_user | session_user 
---------------+--------------
- lottery      | lottery
-(1 row)
+SELECT rolname, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolcanlogin
+FROM pg_roles WHERE rolname IN ('lottery', 'lottery_app') ORDER BY rolname;
+   rolname   | rolsuper | rolbypassrls | rolcreaterole | rolcreatedb | rolcanlogin 
+-------------+----------+--------------+---------------+-------------+-------------
+ lottery     | t        | t            | t             | t           | t
+ lottery_app | f        | f            | f             | f           | t
+(2 rows)
 
-SELECT rolname, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb
-FROM pg_roles WHERE rolname = current_user;
- rolname | rolsuper | rolbypassrls | rolcreaterole | rolcreatedb 
----------+----------+--------------+---------------+-------------
- lottery | t        | t            | t             | t
-(1 row)
+SELECT usename, count(*) AS connections
+FROM pg_stat_activity WHERE datname = current_database() AND backend_type = 'client backend'
+GROUP BY usename ORDER BY usename;
+   usename   | connections 
+-------------+-------------
+ lottery     |           1
+ lottery_app |           6
+(2 rows)
 
 SELECT c.relname, pg_get_userbyid(c.relowner) AS owner, c.relacl
 FROM pg_class c
-WHERE c.relname = 'lottery_draws';
-    relname    |  owner  |          relacl           
----------------+---------+---------------------------
- lottery_draws | lottery | {lottery=arwdDxt/lottery}
-(1 row)
+WHERE c.relname IN ('lottery_draws', 'lottery_draw_seals', 'events', 'bookings', 'users')
+ORDER BY c.relname;
+      relname       |  owner  |                      relacl                       
+--------------------+---------+---------------------------------------------------
+ bookings           | lottery | {lottery=arwdDxt/lottery,lottery_app=ar/lottery}
+ events             | lottery | {lottery=arwdDxt/lottery,lottery_app=arw/lottery}
+ lottery_draw_seals | lottery | {lottery=arwdDxt/lottery,lottery_app=ar/lottery}
+ lottery_draws      | lottery | {lottery=arwdDxt/lottery,lottery_app=ar/lottery}
+ users              | lottery | {lottery=arwdDxt/lottery,lottery_app=arw/lottery}
+(5 rows)
 
-SELECT
-  has_table_privilege(current_user, 'lottery_draws', 'UPDATE')   AS app_can_update,
-  has_table_privilege(current_user, 'lottery_draws', 'DELETE')   AS app_can_delete,
-  has_table_privilege(current_user, 'lottery_draws', 'TRUNCATE') AS app_can_truncate;
- app_can_update | app_can_delete | app_can_truncate 
-----------------+----------------+------------------
- t              | t              | t
-(1 row)
+SELECT t AS table_name,
+  has_table_privilege('lottery_app', t, 'SELECT')   AS sel,
+  has_table_privilege('lottery_app', t, 'INSERT')   AS ins,
+  has_table_privilege('lottery_app', t, 'UPDATE')   AS upd,
+  has_table_privilege('lottery_app', t, 'DELETE')   AS del,
+  has_table_privilege('lottery_app', t, 'TRUNCATE') AS trunc
+FROM unnest(ARRAY['users', 'events', 'bookings', 'lottery_draws', 'lottery_draw_seals', 'schema_migrations']) AS t
+ORDER BY t;
+     table_name     | sel | ins | upd | del | trunc 
+--------------------+-----+-----+-----+-----+-------
+ bookings           | t   | t   | f   | f   | f
+ events             | t   | t   | t   | f   | f
+ lottery_draw_seals | t   | t   | f   | f   | f
+ lottery_draws      | t   | t   | f   | f   | f
+ schema_migrations  | t   | f   | f   | f   | f
+ users              | t   | t   | t   | f   | f
+(6 rows)
 
-SELECT grantee, privilege_type
-FROM information_schema.role_table_grants
-WHERE table_name = 'lottery_draws'
-ORDER BY grantee, privilege_type;
- grantee | privilege_type 
----------+----------------
- lottery | DELETE
- lottery | INSERT
- lottery | REFERENCES
- lottery | SELECT
- lottery | TRIGGER
- lottery | TRUNCATE
- lottery | UPDATE
-(7 rows)
-
-SELECT tgname, pg_get_triggerdef(oid) AS definition
+SELECT tgrelid::regclass AS table_name, tgname, tgenabled, pg_get_triggerdef(oid) AS definition
 FROM pg_trigger
-WHERE tgrelid = 'lottery_draws'::regclass AND NOT tgisinternal;
- tgname | definition 
---------+------------
-(0 rows)
+WHERE tgrelid IN ('lottery_draws'::regclass, 'lottery_draw_seals'::regclass, 'events'::regclass) AND NOT tgisinternal
+ORDER BY 1, 2;
+     table_name     |               tgname               | tgenabled |                                                                          definition                                                                          
+--------------------+------------------------------------+-----------+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ events             | trg_events_drawn_is_final          | O         | CREATE TRIGGER trg_events_drawn_is_final BEFORE DELETE OR UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION forbid_drawn_event_change()
+ events             | trg_events_updated_at              | O         | CREATE TRIGGER trg_events_updated_at BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION set_updated_at()
+ lottery_draws      | trg_lottery_draws_append_only      | O         | CREATE TRIGGER trg_lottery_draws_append_only BEFORE DELETE OR UPDATE ON public.lottery_draws FOR EACH ROW EXECUTE FUNCTION forbid_audit_mutation()
+ lottery_draws      | trg_lottery_draws_no_truncate      | O         | CREATE TRIGGER trg_lottery_draws_no_truncate BEFORE TRUNCATE ON public.lottery_draws FOR EACH STATEMENT EXECUTE FUNCTION forbid_audit_mutation()
+ lottery_draw_seals | trg_lottery_draw_seals_append_only | O         | CREATE TRIGGER trg_lottery_draw_seals_append_only BEFORE DELETE OR UPDATE ON public.lottery_draw_seals FOR EACH ROW EXECUTE FUNCTION forbid_audit_mutation()
+ lottery_draw_seals | trg_lottery_draw_seals_no_truncate | O         | CREATE TRIGGER trg_lottery_draw_seals_no_truncate BEFORE TRUNCATE ON public.lottery_draw_seals FOR EACH STATEMENT EXECUTE FUNCTION forbid_audit_mutation()
+(6 rows)
 
-SELECT rulename FROM pg_rules WHERE tablename = 'lottery_draws';
- rulename 
-----------
-(0 rows)
-
-SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'lottery_draws';
- relrowsecurity | relforcerowsecurity 
-----------------+---------------------
- f              | f
-(1 row)
+SELECT version, name, applied_at FROM schema_migrations ORDER BY version;
+ version |     name     |          applied_at           
+---------+--------------+-------------------------------
+       1 | init         | 2026-10-29 19:11:11.213673+00
+       2 | harden_audit | 2026-10-29 19:11:11.243064+00
+(2 rows)
 

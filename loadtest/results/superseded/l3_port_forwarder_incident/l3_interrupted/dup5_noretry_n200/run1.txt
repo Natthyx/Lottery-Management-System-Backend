@@ -1,0 +1,18 @@
+testRunDurationMs=865.794
+book_201_duration: count=200 min=303.562 med=449.216 avg=455.531 p(90)=530.54 p(95)=543.324 p(99)=574.794 max=586.174
+data_received: rate=486027.854 count=420800
+data_sent: count=367900 rate=424927.87
+http_req_blocked: avg=43.76 p(90)=92.148 p(95)=92.885 p(99)=123.481 max=123.839 count=1000 min=0.096 med=33.617
+http_req_connecting: med=33.575 avg=43.417 p(90)=92.092 p(95)=92.791 p(99)=123.434 max=123.822 count=1000 min=0.076
+http_req_duration: p(95)=690.064 p(99)=738.085 max=748.035 count=1000 min=303.562 med=503.18 avg=514.367 p(90)=637.672
+http_req_duration{expected_response:true}: avg=455.531 p(90)=530.54 p(95)=543.324 p(99)=574.794 max=586.174 count=200 min=303.562 med=449.216
+http_req_failed: rate=0.8 passes=800 fails=200
+http_req_receiving: med=0.019 avg=0.027 p(90)=0.038 p(95)=0.054 p(99)=0.148 max=2.511 count=1000 min=0.006
+http_req_sending: p(90)=15.548 p(95)=32.154 p(99)=34.555 max=78.195 count=1000 min=0.002 med=0.105 avg=3.741
+http_req_tls_handshaking: min=0 med=0 avg=0 p(90)=0 p(95)=0 p(99)=0 max=0 count=1000
+http_req_waiting: count=1000 min=303.194 med=502.085 avg=510.599 p(90)=637.579 p(95)=689.801 p(99)=737.855 max=747.726
+http_reqs: count=1000 rate=1155.009
+iteration_duration: p(95)=817.351 p(99)=842.108 max=850.377 count=200 min=427.568 med=629.422 avg=637.239 p(90)=797.621
+iterations: rate=231.002 count=200
+st_201: count=200 rate=231.002
+st_409_already_booked: count=800 rate=924.007

@@ -63,7 +63,7 @@ capture_env() {
     echo "## redis"; docker exec "$REDIS_CONTAINER" redis-server --version
     echo "## app env (secrets redacted)"
     docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$APP_CONTAINER" |
-      sed -E 's/^(JWT_SECRET|BOOTSTRAP_ADMIN_PASSWORD|DATABASE_URL)=.*/\1=<redacted>/' | sort
+      sed -E 's/^(JWT_SECRET|BOOTSTRAP_ADMIN_PASSWORD|DATABASE_URL|MIGRATION_DATABASE_URL|APP_DB_PASSWORD|POSTGRES_PASSWORD)=.*/\1=<redacted>/' | sort
     echo "## container resource limits (0 = none)"
     for c in "$APP_CONTAINER" "$PG_CONTAINER" "$REDIS_CONTAINER"; do
       docker inspect -f "$c nano_cpus={{.HostConfig.NanoCpus}} memory={{.HostConfig.Memory}}" "$c"
@@ -106,7 +106,7 @@ do_l2() {
     # L2b: same, but clients retry the busy 409 (bounded: 200 attempts), and
     # capacity is N/2 so the capacity check (oversell) can be exercised.
     d="$RESULTS_DIR/l2/retry200_capacity_half_n$n"
-    meta "$d" "L2b hot event, N=$n users, VUs=$n, shared-iterations, client retries busy-409 (5-25 ms jitter, max 200 attempts, then gives up). Capacity $((n / 2))."
+    meta "$d" "L2b hot event, N=$n users, VUs=$n, shared-iterations, client retries busy-503 (5-25 ms jitter, max 200 attempts, then gives up). Capacity $((n / 2))."
     for r in $(seq 1 "$RUNS"); do
       reset_db; ev=$(create_event $((n / 2)) 10 "l2b")
       RESULTS_DIR="$d" run_k6 "run$r" l2_hot_event.js -e N="$n" -e VUS="$n" -e EVENT_ID="$ev" -e RETRY=1 -e MAX_ATTEMPTS=200
@@ -123,7 +123,7 @@ do_l2u() {
   local n r d ev
   for n in $N_LIST; do
     d="$RESULTS_DIR/l2/retry_unbounded_capacity_half_n$n"
-    meta "$d" "L2b-unbounded hot event, N=$n users, VUs=$n, shared-iterations, client retries busy-409 until a non-busy answer (5-25 ms jitter, cap 100000 attempts). Capacity $((n / 2))."
+    meta "$d" "L2b-unbounded hot event, N=$n users, VUs=$n, shared-iterations, client retries busy-503 until a non-busy answer (5-25 ms jitter, cap 100000 attempts). Capacity $((n / 2))."
     for r in $(seq 1 "$RUNS"); do
       reset_db; ev=$(create_event $((n / 2)) 10 "l2u")
       RESULTS_DIR="$d" run_k6 "run$r" l2_hot_event.js -e N="$n" -e VUS="$n" -e EVENT_ID="$ev" -e RETRY=1 -e MAX_ATTEMPTS=100000
@@ -140,7 +140,7 @@ do_l2_sweep() {
   for retry in 0 1; do
     name=$([[ $retry == 1 ]] && echo retry || echo noretry)
     d="$RESULTS_DIR/l2/sweep_$name"
-    meta "$d" "L2c concurrency sweep, constant-vus stages $SWEEP_LEVELS, ${SWEEP_STAGE_S}s each, closed loop, 1000 users, all VUs of a stage on the same event. retry=$retry (if 1: busy-409 retried after 5-25 ms jitter, max 200 attempts). Per-stage rates are count / ${SWEEP_STAGE_S}s." "$SWEEP_STAGE_S"
+    meta "$d" "L2c concurrency sweep, constant-vus stages $SWEEP_LEVELS, ${SWEEP_STAGE_S}s each, closed loop, 1000 users, all VUs of a stage on the same event. retry=$retry (if 1: busy-503 retried after 5-25 ms jitter, max 200 attempts). Per-stage rates are count / ${SWEEP_STAGE_S}s." "$SWEEP_STAGE_S"
     for r in $(seq 1 "$RUNS"); do
       reset_db
       bulk_events $((7 * SWEEP_EVENTS_PER_STAGE)) 1000 10
@@ -158,12 +158,12 @@ do_l3() {
     for retry in 1 0; do
       name=$([[ $retry == 1 ]] && echo retry || echo noretry)
       d="$RESULTS_DIR/l3/dup5_${name}_n$n"
-      meta "$d" "L3 duplicates, N=$n users, each sends 5 identical POST /book in parallel (http.batch), VUs=min(N,200). retry=$retry (busy-409 retried after 5-25 ms jitter until a non-busy answer, cap 100000 attempts). Capacity 5N."
+      meta "$d" "L3 duplicates, N=$n users, each sends 5 identical POST /book in parallel (http.batch), VUs=min(N,200). retry=$retry (busy-503 retried after 5-25 ms jitter until a non-busy answer, cap 100000 attempts). Capacity 5N. Both variants must leave exactly one booking per user."
       for r in $(seq 1 "$RUNS"); do
         reset_db; ev=$(create_event $((n * 5)) 10 "l3")
         RESULTS_DIR="$d" run_k6 "run$r" l2_hot_event.js -e MODE=duplicates -e DUP=5 -e N="$n" \
           -e VUS=$((n < 200 ? n : 200)) -e EVENT_ID="$ev" -e RETRY="$retry" -e MAX_ATTEMPTS=100000
-        psql_f "$LT_DIR/sql/l3_invariants.sql" -v event_id="$ev" -v n_users="$n" -v require_exactly_one="$retry" >"$d/sql_run$r.txt"
+        psql_f "$LT_DIR/sql/l3_invariants.sql" -v event_id="$ev" -v n_users="$n" -v require_exactly_one=1 >"$d/sql_run$r.txt"
         psql_f "$LT_DIR/sql/booking_invariants.sql" -v expected_bookings="$(st201 "$d/run$r.json")" >>"$d/sql_run$r.txt"
       done
     done
@@ -175,9 +175,10 @@ do_l4() {
   d="$RESULTS_DIR/l4/draw20_n1000"
   meta "$d" "L4 concurrent draws: event with 1000 bookings, capacity 1000, winner_count 100, closed; 20 simultaneous POST /draw (per-vu-iterations, 20 VUs x 1)."
   for r in $(seq 1 "$RUNS"); do
-    reset_db; ev=$(create_event 1000 100 "l4")
+    reset_db; ev=$(create_event 1000 100 "l4" 5)
     RESULTS_DIR="$d/prep" run_k6 "prep_run$r" l2_hot_event.js -e N=1000 -e VUS=50 -e EVENT_ID="$ev" -e RETRY=1
     close_event "$ev"
+    wait_until_drawable "$ev"
     RESULTS_DIR="$d" run_k6 "run$r" l4_draws.js -e EVENT_ID="$ev" -e CONCURRENCY=20
     psql_f "$LT_DIR/sql/l4_invariants.sql" -v event_id="$ev" >"$d/sql_run$r.txt"
     # Three views of the same draw, normalised to "rank user W|L" lines.
@@ -195,6 +196,11 @@ do_l4() {
       if diff -q "$d/draw_db_run$r.txt" "$d/draw_api_results_run$r.txt" >/dev/null; then echo "db vs GET /results: IDENTICAL"; else echo "db vs GET /results: DIFFERENT"; fi
       if diff -q "$d/draw_db_run$r.txt" "$d/draw_post_response_run$r.txt" >/dev/null; then echo "db vs POST /draw 200 body: IDENTICAL"; else echo "db vs POST /draw 200 body: DIFFERENT"; fi
       echo "winners in GET /results: $(grep -c ' W$' "$d/draw_api_results_run$r.txt")  waitlist: $(grep -c ' L$' "$d/draw_api_results_run$r.txt")"
+      local post_digest
+      post_digest=$({ grep -o 'DRAW_200_BODY .*' "$d/run$r.txt" || true; } | head -1 | sed 's/^DRAW_200_BODY //' | jq -r '.data.digest' 2>/dev/null || true)
+      curl -sS "$BASE_URL/events/$ev/results" | jq -r --arg p "$post_digest" \
+        '"GET /results integrity: \(.data.integrity)\nseal digest: \(.data.digest)\nPOST /draw digest matches seal: \(.data.digest == $p)"'
+      echo "seal rows for event: $(psql_q "SELECT count(*) FROM lottery_draw_seals WHERE event_id = $ev")"
     } >"$d/compare_run$r.txt"
   done
 }
@@ -210,7 +216,7 @@ do_l5() {
   "$STATE_DIR/fairness" -k 10 -w 5 -draws 5000 -repeat 2000 >"$d/algorithm_calibration_2000x5000.txt"
   for r in $(seq 1 "$RUNS"); do
     reset_db
-    go run ./loadtest/cmd/fairness-api -base "$BASE_URL" -tokens "$STATE_DIR/tokens.json" -k 10 -w 5 -draws 1000 -c 8 \
+    go run ./loadtest/cmd/fairness-api -base "$BASE_URL" -tokens "$STATE_DIR/tokens.json" -k 10 -w 5 -draws 1000 -c 32 \
       >"$d/api_1000_run$r.txt" 2>"$d/api_1000_run$r.stderr.txt"
   done
 }
@@ -219,18 +225,43 @@ do_l6() {
   # Needs a drawn event: build one exactly like L4 (without the k6 draw).
   local d="$RESULTS_DIR/l6" ev
   mkdir -p "$d"
-  reset_db; ev=$(create_event 1000 100 "l6")
+  reset_db; ev=$(create_event 1000 100 "l6" 5)
   RESULTS_DIR="$d/prep" run_k6 prep l2_hot_event.js -e N=1000 -e VUS=50 -e EVENT_ID="$ev" -e RETRY=1
   close_event "$ev"
-  api POST "/events/$ev/draw" | jq -c '{success, winners: (.data.winners | length), waitlist: (.data.waitlist | length)}' >"$d/draw.txt"
+  wait_until_drawable "$ev"
+  api POST "/events/$ev/draw" | jq -c '{success, winners: (.data.winners | length), waitlist: (.data.waitlist | length), digest: .data.digest}' >"$d/draw.txt"
   psql_f "$LT_DIR/sql/l6_tamper.sql" >"$d/tamper.txt" 2>&1 || true
+
+  # Tamper detection: the one attack the triggers cannot stop is a superuser
+  # skipping triggers (session_replication_role = replica). Do it for real
+  # (committed), check that GET /results reports it, then restore.
+  local swap="SET session_replication_role = replica;
+    WITH r1 AS (SELECT id, winner_user_id FROM lottery_draws WHERE event_id = $ev AND draw_rank = 1),
+         rn AS (SELECT id, winner_user_id FROM lottery_draws WHERE event_id = $ev ORDER BY draw_rank DESC LIMIT 1)
+    UPDATE lottery_draws t SET winner_user_id = CASE WHEN t.id = r1.id THEN rn.winner_user_id ELSE r1.winner_user_id END
+    FROM r1, rn WHERE t.id IN (r1.id, rn.id);"
+  local since
+  since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  {
+    echo "## 1. before: GET /results"
+    curl -sS "$BASE_URL/events/$ev/results" | jq -c '{integrity: .data.integrity, digest: .data.digest, rank1: .data.winners[0].winner_user_id}'
+    echo "## 2. superuser swaps rank-1 winner with last-ranked entrant, triggers skipped, COMMITTED"
+    psql_q "$swap" || true
+    echo "## 3. after tampering: GET /results"
+    curl -sS "$BASE_URL/events/$ev/results" | jq -c '{integrity: .data.integrity, digest: .data.digest, rank1: .data.winners[0].winner_user_id}'
+    echo "## 4. app log lines since step 1 (level error)"
+    docker logs --since "$since" "$APP_CONTAINER" 2>&1 | { grep '"level":"error"' || true; } | head -5
+    echo "## 5. restore (swap back), then GET /results"
+    psql_q "$swap" || true
+    curl -sS "$BASE_URL/events/$ev/results" | jq -c '{integrity: .data.integrity, digest: .data.digest, rank1: .data.winners[0].winner_user_id}'
+  } >"$d/tamper_detection.txt" 2>&1
 }
 
 do_l7() {
   local d ev rate r
-  reset_db; ev=$(create_event 1000 100 "l7 drawn")
+  reset_db; ev=$(create_event 1000 100 "l7 drawn" 5)
   RESULTS_DIR="$RESULTS_DIR/l7/prep" run_k6 prep l2_hot_event.js -e N=1000 -e VUS=50 -e EVENT_ID="$ev" -e RETRY=1
-  close_event "$ev"; api POST "/events/$ev/draw" >/dev/null
+  close_event "$ev"; wait_until_drawable "$ev"; api POST "/events/$ev/draw" >/dev/null
   for i in $(seq 2 50); do create_event 1000 10 "l7 open $i" >/dev/null; done
   {
     curl -sS -o /dev/null -w 'GET /events bytes=%{size_download}\n' "$BASE_URL/events"
@@ -254,11 +285,8 @@ now_ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time * 1000'; }
 restart_app_fresh() {
   # Restart resets httprate's in-memory counters. Readiness: wait for the
   # "HTTP server listening" log line, then poll GET /health until it returns
-  # 200. Attempts that get no HTTP response (Docker Desktop's port forward
-  # lags the app by a moment) never reach the app and are not counted; the
-  # single successful probe IS counted by the general limiter, so the API
-  # test below expects 99 more 200s, not 100. /health is not an /auth route,
-  # so the auth budget is untouched.
+  # 200. /health is outside the rate limiter (it used to count against it),
+  # so probing spends no budget.
   local since code
   since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   docker restart "$APP_CONTAINER" >/dev/null
@@ -267,8 +295,8 @@ restart_app_fresh() {
     sleep 0.5
   done
   for _ in $(seq 1 100); do
-    code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/health")
-    [[ "$code" == "200" ]] && { echo "readiness: 1 successful GET /health probe (counts against the general limit)"; return 0; }
+    code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/health" || true)
+    [[ "$code" == "200" ]] && { echo "readiness: GET /health returned 200 (not rate limited)"; return 0; }
     [[ "$code" == "000" ]] || die "unexpected /health status $code after restart"
     sleep 0.1
   done
@@ -276,32 +304,73 @@ restart_app_fresh() {
 }
 
 do_l8() {
-  local d="$RESULTS_DIR/l8" r codes
+  local d="$RESULTS_DIR/l8" r codes peer
   mkdir -p "$d"
-  log "L8: restarting app with the code-default rate limits"
-  stack_up LT_API_RATE_LIMIT_REQUESTS=100 LT_API_RATE_LIMIT_WINDOW=1m \
-    LT_AUTH_RATE_LIMIT_REQUESTS=10 LT_AUTH_RATE_LIMIT_WINDOW=1m LT_LOG_LEVEL=info
-  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$APP_CONTAINER" | grep RATE_LIMIT | sort >"$d/limits_in_effect.txt"
+  local defaults=(LT_API_RATE_LIMIT_REQUESTS=100 LT_API_RATE_LIMIT_WINDOW=1m
+    LT_AUTH_RATE_LIMIT_REQUESTS=10 LT_AUTH_RATE_LIMIT_WINDOW=1m
+    LT_AUTH_ACCOUNT_RATE_LIMIT_REQUESTS=10 LT_AUTH_ACCOUNT_RATE_LIMIT_WINDOW=15m LT_LOG_LEVEL=info)
+  log "L8: restarting app with the code-default rate limits, no trusted proxies"
+  stack_up "${defaults[@]}"
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$APP_CONTAINER" | grep -E 'RATE_LIMIT|TRUSTED' | sort >"$d/limits_in_effect.txt"
   for r in $(seq 1 "$RUNS"); do
     {
       restart_app_fresh
-      echo "## A. general API limit (100/min): 120 sequential GET /events from one IP; 1 request already used by the probe"
+      echo "## A. general API limit (100/min): 120 sequential GET /events from one IP"
       codes=$(for _ in $(seq 1 120); do curl -s -o /dev/null -w '%{http_code}\n' "$BASE_URL/events"; done)
       echo "$codes" | uniq -c
       echo "first_429_at_request=$(echo "$codes" | grep -n 429 | head -1 | cut -d: -f1)"
       echo "## A2. one more GET /events, headers"
       curl -s -D - -o /dev/null "$BASE_URL/events" | grep -iE '^(HTTP|x-ratelimit|retry-after)'
-      echo "## A3. same request with a spoofed X-Forwarded-For (RealIP middleware runs before the limiter)"
+      echo "## A3. same request with a spoofed X-Forwarded-For / X-Real-IP (must stay 429)"
       for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code}\n' -H "X-Forwarded-For: 203.0.113.$i" "$BASE_URL/events"; done | uniq -c
+      for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code}\n' -H "X-Real-IP: 198.51.100.$i" "$BASE_URL/events"; done | uniq -c
+      echo "## A4. health and readiness while the API limit is exhausted (must be 200)"
+      curl -s -o /dev/null -w 'GET /health %{http_code}\n' "$BASE_URL/health"
+      curl -s -o /dev/null -w 'GET /ready %{http_code}\n' "$BASE_URL/ready"
 
       restart_app_fresh
       echo "## B. auth limit: 15 sequential POST /auth/login with body {} (401 without running bcrypt)"
       codes=$(for _ in $(seq 1 15); do curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' "$BASE_URL/auth/login"; done)
       echo "$codes" | uniq -c
       echo "first_429_at_request=$(echo "$codes" | grep -n 429 | head -1 | cut -d: -f1)"
-      echo "## B2. same with a spoofed X-Real-IP"
+      echo "## B2. same with a spoofed X-Real-IP / X-Forwarded-For (must stay 429)"
       for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -H "X-Real-IP: 198.51.100.$i" -d '{}' "$BASE_URL/auth/login"; done | uniq -c
+      for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -H "X-Forwarded-For: 203.0.113.$i" -d '{}' "$BASE_URL/auth/login"; done | uniq -c
     } >"$d/run$r.txt" 2>&1
+  done
+
+  # C. Behind a trusted proxy. Find the peer address the app sees for our
+  # requests (Docker Desktop's forwarder), trust exactly that /32, and check
+  # (1) forwarded client IPs are honoured from it, and (2) the per-account
+  # login limit holds even when every attempt comes from a different IP.
+  local since
+  since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  curl -s -o /dev/null "$BASE_URL/events"
+  peer=$(docker logs --since "$since" "$APP_CONTAINER" 2>&1 | grep '"http_request"' | tail -1 | jq -r '.remote_addr' | sed -E 's/:[0-9]+$//')
+  [[ -n "$peer" && "$peer" != "null" ]] || die "could not determine peer address"
+  log "L8: trusting proxy $peer/32"
+  stack_up "${defaults[@]}" LT_TRUSTED_PROXIES="$peer/32"
+  echo "TRUSTED_PROXIES=$peer/32 (the address the app sees for host requests)" >>"$d/limits_in_effect.txt"
+  for r in $(seq 1 "$RUNS"); do
+    {
+      restart_app_fresh
+      echo "## C1. per-IP auth limit keys on the forwarded client IP: 11 x POST /auth/login (a different unknown email each time) with X-Forwarded-For 198.51.100.50"
+      for i in $(seq 1 11); do curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -H 'X-Forwarded-For: 198.51.100.50' \
+        -d "{\"email\":\"c1-$i@nowhere.local\",\"password\":\"x\"}" "$BASE_URL/auth/login" || true; done | uniq -c
+      echo "## C2. a different forwarded client is not affected"
+      curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -H 'X-Forwarded-For: 198.51.100.51' \
+        -d '{"email":"c2@nowhere.local","password":"x"}' "$BASE_URL/auth/login" || true
+
+      restart_app_fresh
+      echo "## C3. per-account limit (10/15m): 12 wrong-password logins for ONE account, each from a DIFFERENT forwarded IP"
+      codes=$(for i in $(seq 1 12); do curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' \
+        -H "X-Forwarded-For: 203.0.113.$i" -d '{"email":"lt-user-0000@loadtest.local","password":"definitely-wrong-password"}' "$BASE_URL/auth/login"; done)
+      echo "$codes" | uniq -c
+      echo "first_429_at_request=$(echo "$codes" | grep -n 429 | head -1 | cut -d: -f1)"
+      echo "## C4. another account from a fresh IP is unaffected"
+      curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -H 'X-Forwarded-For: 203.0.113.99' \
+        -d '{"email":"lt-user-0001@loadtest.local","password":"definitely-wrong-password"}' "$BASE_URL/auth/login"
+    } >"$d/proxy_run$r.txt" 2>&1
   done
   log "L8: restoring raised limits"
   stack_up

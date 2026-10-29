@@ -1,0 +1,13 @@
+readiness: GET /health returned 200 (not rate limited)
+## C1. per-IP auth limit keys on the forwarded client IP: 11 x POST /auth/login (a different unknown email each time) with X-Forwarded-For 198.51.100.50
+  10 401
+   1 429
+## C2. a different forwarded client is not affected
+401
+readiness: GET /health returned 200 (not rate limited)
+## C3. per-account limit (10/15m): 12 wrong-password logins for ONE account, each from a DIFFERENT forwarded IP
+  10 401
+   2 429
+first_429_at_request=11
+## C4. another account from a fresh IP is unaffected
+401

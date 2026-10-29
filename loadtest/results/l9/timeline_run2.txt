@@ -1,14 +1,12 @@
-sigterm: docker kill started_ms=1793297470158 returned_ms=1793297470247 (host clock)
+sigterm: docker kill started_ms=1793303486982 returned_ms=1793303487025 (host clock)
 restart_count_before=0 after=0 state_after_run=exited
 ## app log lines after SIGTERM (http_request lines omitted)
-{"level":"info","signal":"terminated","time":"2026-10-29T18:11:10.231811342Z","message":"shutdown signal received"}
-{"level":"info","time":"2026-10-29T18:11:10.253545592Z","message":"server stopped cleanly"}
+{"level":"info","signal":"terminated","time":"2026-10-29T19:51:27.005237418Z","message":"shutdown signal received"}
+{"level":"info","time":"2026-10-29T19:51:27.022909626Z","message":"server stopped cleanly"}
 ## per-request outcome by phase (from the R lines in run2.txt)
 ## in_flight = started before docker kill began and finished after it
-23053 finished_before_sigterm s201 status=201 k6_error_code=0
-11991 finished_before_sigterm busy status=409 k6_error_code=1409
+28648 finished_before_sigterm s201 status=201 k6_error_code=0
 50 in_flight_at_sigterm s201 status=201 k6_error_code=0
-6700 started_after_sigterm netErr status=0 k6_error_code=1212
+6806 started_after_sigterm netErr status=0 k6_error_code=1212
 150 started_after_sigterm netErr status=0 k6_error_code=1000
-123 started_after_sigterm s201 status=201 k6_error_code=0
-81 started_after_sigterm busy status=409 k6_error_code=1409
+108 started_after_sigterm s201 status=201 k6_error_code=0

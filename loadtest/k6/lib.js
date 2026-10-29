@@ -20,11 +20,12 @@ export function userCount() {
 export const TREND_STATS = ['min', 'med', 'avg', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'];
 
 // One counter per outcome, so the summary JSON carries the full status-code
-// distribution. 409 is split by the error body because the API uses 409 for
-// four different reasons (internal/booking/handler.go).
+// distribution. Outcomes are classified by the response's "code" field
+// (internal/booking/handler.go). "busy" is 503 event_busy since the fix
+// (it was a 409 in the baseline).
 export const outcomes = {
   s201: new Counter('st_201'),
-  busy: new Counter('st_409_busy'),
+  busy: new Counter('st_503_busy'),
   already: new Counter('st_409_already_booked'),
   full: new Counter('st_409_full'),
   notOpen: new Counter('st_409_not_open'),
@@ -44,13 +45,18 @@ export function classify(res) {
   }
   if (res.status === 201) return 's201';
   if (res.status === 429) return 's429';
+  let code = '';
+  try {
+    code = JSON.parse(res.body || '{}').code || '';
+  } catch (e) {
+    code = '';
+  }
+  if (res.status === 503 && code === 'event_busy') return 'busy';
   if (res.status >= 500) return 's5xx';
   if (res.status === 409) {
-    const body = res.body || '';
-    if (body.includes('event is busy')) return 'busy';
-    if (body.includes('already booked')) return 'already';
-    if (body.includes('fully booked')) return 'full';
-    if (body.includes('not open for booking')) return 'notOpen';
+    if (code === 'already_booked') return 'already';
+    if (code === 'event_full') return 'full';
+    if (code === 'event_not_open') return 'notOpen';
     return 'other409';
   }
   return 'other';
@@ -59,6 +65,11 @@ export function classify(res) {
 export function record(res, tags) {
   const kind = classify(res);
   outcomes[kind].add(1, tags);
+  // Keep the transport-level reason for every failed request (the raw log
+  // format drops k6's own "Request Failed" details).
+  if (kind === 'netErr' || kind === 'timeout') {
+    console.log(`NETERR t=${Date.now()} code=${res.error_code} err=${JSON.stringify(res.error)}`);
+  }
   if (kind === 's201') bookOk.add(res.timings.duration, tags);
   return kind;
 }
@@ -76,7 +87,7 @@ export function book(eventId, userIdx, tags) {
 }
 
 // bookWithRetry models a client that honours "event is busy, please retry":
-// it retries only on the busy 409, with jittered backoff, up to maxAttempts.
+// it retries only on the busy response, with jittered backoff, up to maxAttempts.
 // Returns the final outcome kind and the number of attempts.
 export const attempts = new Trend('book_attempts');
 // Logical bookings that were still "busy" after maxAttempts (client gave up).

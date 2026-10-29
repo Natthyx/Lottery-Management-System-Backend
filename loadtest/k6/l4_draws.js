@@ -11,6 +11,7 @@ const CONCURRENCY = parseInt(__ENV.CONCURRENCY || '20', 10);
 
 const st200 = new Counter('draw_200');
 const already = new Counter('draw_409_already_drawn');
+const notDue = new Counter('draw_409_not_due');
 const other409 = new Counter('draw_409_other');
 const s5xx = new Counter('draw_5xx');
 const other = new Counter('draw_other');
@@ -28,7 +29,8 @@ export default function () {
   if (res.status === 200) {
     st200.add(1);
     console.log(`DRAW_200_BODY ${res.body.trim()}`);
-  } else if (res.status === 409 && res.body.includes('already been drawn')) already.add(1);
+  } else if (res.status === 409 && res.body.includes('"already_drawn"')) already.add(1);
+  else if (res.status === 409 && res.body.includes('"draw_not_due"')) notDue.add(1);
   else if (res.status === 409) other409.add(1);
   else if (res.status >= 500) s5xx.add(1);
   else {

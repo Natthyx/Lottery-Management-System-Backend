@@ -1,32 +1,34 @@
--- Phase 0 / L6: who does the app connect as, who owns lottery_draws, and
--- what actually protects it. Read-only.
+-- Phase 0 / L6: who does the app connect as, who owns the audit tables,
+-- and what protects them. Read-only. Run as the schema owner (psql -U lottery).
 
--- The role in DATABASE_URL (docker-compose.yml: POSTGRES_USER, default "lottery").
-SELECT current_user, session_user;
+-- Roles: the owner used for migrations and the runtime role the app uses.
+SELECT rolname, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolcanlogin
+FROM pg_roles WHERE rolname IN ('lottery', 'lottery_app') ORDER BY rolname;
 
-SELECT rolname, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb
-FROM pg_roles WHERE rolname = current_user;
+-- Which role the running app is actually connected as.
+SELECT usename, count(*) AS connections
+FROM pg_stat_activity WHERE datname = current_database() AND backend_type = 'client backend'
+GROUP BY usename ORDER BY usename;
 
 SELECT c.relname, pg_get_userbyid(c.relowner) AS owner, c.relacl
 FROM pg_class c
-WHERE c.relname = 'lottery_draws';
+WHERE c.relname IN ('lottery_draws', 'lottery_draw_seals', 'events', 'bookings', 'users')
+ORDER BY c.relname;
 
--- Privileges as reported by the catalog for the app role and for PUBLIC.
-SELECT
-  has_table_privilege(current_user, 'lottery_draws', 'UPDATE')   AS app_can_update,
-  has_table_privilege(current_user, 'lottery_draws', 'DELETE')   AS app_can_delete,
-  has_table_privilege(current_user, 'lottery_draws', 'TRUNCATE') AS app_can_truncate;
+-- Privileges of the runtime role on each table.
+SELECT t AS table_name,
+  has_table_privilege('lottery_app', t, 'SELECT')   AS sel,
+  has_table_privilege('lottery_app', t, 'INSERT')   AS ins,
+  has_table_privilege('lottery_app', t, 'UPDATE')   AS upd,
+  has_table_privilege('lottery_app', t, 'DELETE')   AS del,
+  has_table_privilege('lottery_app', t, 'TRUNCATE') AS trunc
+FROM unnest(ARRAY['users', 'events', 'bookings', 'lottery_draws', 'lottery_draw_seals', 'schema_migrations']) AS t
+ORDER BY t;
 
-SELECT grantee, privilege_type
-FROM information_schema.role_table_grants
-WHERE table_name = 'lottery_draws'
-ORDER BY grantee, privilege_type;
-
--- Any non-internal triggers on lottery_draws? (Expected by the spec to be checked.)
-SELECT tgname, pg_get_triggerdef(oid) AS definition
+-- Triggers protecting the audit trail and drawn events.
+SELECT tgrelid::regclass AS table_name, tgname, tgenabled, pg_get_triggerdef(oid) AS definition
 FROM pg_trigger
-WHERE tgrelid = 'lottery_draws'::regclass AND NOT tgisinternal;
+WHERE tgrelid IN ('lottery_draws'::regclass, 'lottery_draw_seals'::regclass, 'events'::regclass) AND NOT tgisinternal
+ORDER BY 1, 2;
 
--- Any rules or row-level security?
-SELECT rulename FROM pg_rules WHERE tablename = 'lottery_draws';
-SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'lottery_draws';
+SELECT version, name, applied_at FROM schema_migrations ORDER BY version;

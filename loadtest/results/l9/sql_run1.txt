@@ -6,26 +6,26 @@ ORDER BY e.id
 LIMIT 20;
   section  | event_id | capacity | bookings | distinct_users 
 -----------+----------+----------+----------+----------------
- per_event |        1 |     1000 |      409 |            409
- per_event |        2 |     1000 |      459 |            459
- per_event |        3 |     1000 |      447 |            447
- per_event |        4 |     1000 |      461 |            461
- per_event |        5 |     1000 |      452 |            452
- per_event |        6 |     1000 |      455 |            455
- per_event |        7 |     1000 |      452 |            452
- per_event |        8 |     1000 |      442 |            442
- per_event |        9 |     1000 |      474 |            474
- per_event |       10 |     1000 |      454 |            454
- per_event |       11 |     1000 |      452 |            452
- per_event |       12 |     1000 |      464 |            464
- per_event |       13 |     1000 |      460 |            460
- per_event |       14 |     1000 |      451 |            451
- per_event |       15 |     1000 |      457 |            457
- per_event |       16 |     1000 |      451 |            451
- per_event |       17 |     1000 |      447 |            447
- per_event |       18 |     1000 |      456 |            456
- per_event |       19 |     1000 |      453 |            453
- per_event |       20 |     1000 |      467 |            467
+ per_event |        1 |     1000 |      541 |            541
+ per_event |        2 |     1000 |      541 |            541
+ per_event |        3 |     1000 |      541 |            541
+ per_event |        4 |     1000 |      541 |            541
+ per_event |        5 |     1000 |      541 |            541
+ per_event |        6 |     1000 |      541 |            541
+ per_event |        7 |     1000 |      541 |            541
+ per_event |        8 |     1000 |      541 |            541
+ per_event |        9 |     1000 |      541 |            541
+ per_event |       10 |     1000 |      540 |            540
+ per_event |       11 |     1000 |      540 |            540
+ per_event |       12 |     1000 |      540 |            540
+ per_event |       13 |     1000 |      540 |            540
+ per_event |       14 |     1000 |      540 |            540
+ per_event |       15 |     1000 |      540 |            540
+ per_event |       16 |     1000 |      540 |            540
+ per_event |       17 |     1000 |      540 |            540
+ per_event |       18 |     1000 |      540 |            540
+ per_event |       19 |     1000 |      540 |            540
+ per_event |       20 |     1000 |      540 |            540
 (20 rows)
 
 WITH dup AS (
@@ -41,13 +41,13 @@ SELECT 'events over capacity', (SELECT count(*) FROM over)::text,
        CASE WHEN (SELECT count(*) FROM over) = 0 THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
 SELECT 'total bookings vs client-observed 201s',
-       (SELECT n FROM tot) || ' vs ' || 22620,
-       CASE WHEN 22620 < 0 THEN 'SKIPPED'
-            WHEN (SELECT n FROM tot) = 22620 THEN 'PASS' ELSE 'FAIL' END;
+       (SELECT n FROM tot) || ' vs ' || 27009,
+       CASE WHEN 27009 < 0 THEN 'SKIPPED'
+            WHEN (SELECT n FROM tot) = 27009 THEN 'PASS' ELSE 'FAIL' END;
                  check                  |    observed    | result 
 ----------------------------------------+----------------+--------
  duplicate (event,user) pairs           | 0              | PASS
  events over capacity                   | 0              | PASS
- total bookings vs client-observed 201s | 22620 vs 22620 | PASS
+ total bookings vs client-observed 201s | 27009 vs 27009 | PASS
 (3 rows)
 

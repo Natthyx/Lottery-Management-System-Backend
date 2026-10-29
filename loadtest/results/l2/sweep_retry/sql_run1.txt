@@ -16,7 +16,7 @@ LIMIT 20;
  per_event |        8 |     1000 |     1000 |           1000
  per_event |        9 |     1000 |     1000 |           1000
  per_event |       10 |     1000 |     1000 |           1000
- per_event |       11 |     1000 |      538 |            538
+ per_event |       11 |     1000 |      567 |            567
  per_event |      201 |     1000 |     1000 |           1000
  per_event |      202 |     1000 |     1000 |           1000
  per_event |      203 |     1000 |     1000 |           1000
@@ -41,13 +41,13 @@ SELECT 'events over capacity', (SELECT count(*) FROM over)::text,
        CASE WHEN (SELECT count(*) FROM over) = 0 THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
 SELECT 'total bookings vs client-observed 201s',
-       (SELECT n FROM tot) || ' vs ' || 65399,
-       CASE WHEN 65399 < 0 THEN 'SKIPPED'
-            WHEN (SELECT n FROM tot) = 65399 THEN 'PASS' ELSE 'FAIL' END;
-                 check                  |    observed    | result 
-----------------------------------------+----------------+--------
- duplicate (event,user) pairs           | 0              | PASS
- events over capacity                   | 0              | PASS
- total bookings vs client-observed 201s | 65399 vs 65399 | PASS
+       (SELECT n FROM tot) || ' vs ' || 120069,
+       CASE WHEN 120069 < 0 THEN 'SKIPPED'
+            WHEN (SELECT n FROM tot) = 120069 THEN 'PASS' ELSE 'FAIL' END;
+                 check                  |     observed     | result 
+----------------------------------------+------------------+--------
+ duplicate (event,user) pairs           | 0                | PASS
+ events over capacity                   | 0                | PASS
+ total bookings vs client-observed 201s | 120069 vs 120069 | PASS
 (3 rows)
 

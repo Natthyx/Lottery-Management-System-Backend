@@ -1850,244 +1850,35 @@ Request Failed
 Request Failed
 Request Failed
 Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-Request Failed
-testRunDurationMs=62345.609
-data_received: count=4345873870 rate=69706174.015
-data_received{ep:get}: count=21027588 rate=337274.563
-data_received{ep:list}: count=180651480 rate=2897581.448
-data_received{ep:results}: rate=66471318.004 count=4144194802
-data_sent: count=8510216 rate=136500.648
-dropped_iterations: count=73893 rate=1185.216
-http_req_blocked: p(99)=0.4 max=64.319 count=106110 min=0 med=0.002 avg=0.035 p(90)=0.006 p(95)=0.077
-http_req_connecting: min=0 med=0 avg=0.026 p(90)=0 p(95)=0 p(99)=0.282 max=64.305 count=106110
-http_req_duration: max=30181.312 count=106110 min=1.513 med=297.21 avg=1496.53 p(90)=1724.559 p(95)=2698.348 p(99)=29999.985
-http_req_duration{ep:get}: count=43528 min=1.513 med=246.043 avg=1145.65 p(90)=494.708 p(95)=883.53 p(99)=29999.965 max=30181.312
-http_req_duration{ep:list}: med=259.576 avg=1386.485 p(90)=679.296 p(95)=1299.976 p(99)=30000.003 max=30172.939 count=37313 min=1.73
-http_req_duration{ep:results}: p(99)=29999.99 max=30018.062 count=25269 min=3.473 med=1344.328 avg=2263.447 p(90)=2422.044 p(95)=3087.433
-http_req_duration{expected_response:true}: max=29904.601 count=104052 min=1.513 med=293.241 avg=932.743 p(90)=1602.117 p(95)=2074.561 p(99)=20417.332
-http_req_failed: passes=2058 fails=104052 rate=0.019
-http_req_failed{ep:get}: rate=0.018 passes=789 fails=42739
-http_req_failed{ep:list}: rate=0.022 passes=803 fails=36510
-http_req_failed{ep:results}: fails=24803 rate=0.018 passes=466
-http_req_receiving: count=106110 min=0 med=0.039 avg=243.604 p(90)=1111.836 p(95)=1463.461 p(99)=2131.493 max=3372.247
-http_req_sending: count=106110 min=0.001 med=0.005 avg=0.028 p(90)=0.019 p(95)=0.03 p(99)=0.15 max=34.721
-http_req_tls_handshaking: p(99)=0 max=0 count=106110 min=0 med=0 avg=0 p(90)=0 p(95)=0
-http_req_waiting: p(90)=498.877 p(95)=934.727 p(99)=29999.969 max=30181.291 count=106110 min=1.494 med=240.976 avg=1252.899
-http_reqs: count=106110 rate=1701.964
-http_reqs{ep:get}: count=43528 rate=698.173
-http_reqs{ep:list}: count=37313 rate=598.486
-http_reqs{ep:results}: count=25269 rate=405.305
-iteration_duration: max=30182.279 count=106110 min=1.547 med=297.31 avg=1496.682 p(90)=1724.672 p(95)=2698.416 p(99)=30000.497
-iterations: count=106110 rate=1701.964
-st_2xx: count=104052 rate=1668.955
-st_timeout: count=2058 rate=33.01
-vus: value=1053 min=316 max=3000
-vus_max: value=3000 min=361 max=3000
+testRunDurationMs=62056.839
+data_received: count=3060703251 rate=49320966.074
+data_received{ep:get}: count=16982892 rate=273666.727
+data_received{ep:list}: count=160159888 rate=2580857.978
+data_received{ep:results}: rate=46466441.37 count=2883560471
+data_sent: rate=101577.136 count=6303556
+dropped_iterations: count=101159 rate=1630.102
+http_req_blocked: count=78844 min=0 med=0.002 avg=0.091 p(90)=0.01 p(95)=0.139 p(99)=0.777 max=196.751
+http_req_connecting: max=51.898 count=78844 min=0 med=0 avg=0.068 p(90)=0 p(95)=0.109 p(99)=0.557
+http_req_duration: min=1.323 med=539.481 avg=2197.182 p(90)=3290.635 p(95)=5056.147 p(99)=30000.255 max=30282.096 count=78844
+http_req_duration{ep:get}: p(99)=30000.46 max=30273.085 count=28964 min=1.323 med=351.871 avg=1968.077 p(90)=842.175 p(95)=25813.373
+http_req_duration{ep:list}: p(90)=1130.954 p(95)=1700.585 p(99)=30000.166 max=30272.064 count=32416 min=1.499 med=489.846 avg=1771.685
+http_req_duration{ep:results}: max=30282.096 count=17464 min=5.387 med=2097.785 avg=3366.945 p(90)=4333.377 p(95)=4965.543 p(99)=30000.083
+http_req_duration{expected_response:true}: avg=1529.29 p(90)=2666.228 p(95)=3957.878 p(99)=27631.261 max=29894.921 count=76995 min=1.323 med=531.496
+http_req_failed: rate=0.023 passes=1849 fails=76995
+http_req_failed{ep:get}: passes=800 fails=28164 rate=0.028
+http_req_failed{ep:list}: fails=31696 rate=0.022 passes=720
+http_req_failed{ep:results}: fails=17135 rate=0.019 passes=329
+http_req_receiving: med=0.072 avg=428.722 p(90)=1720.794 p(95)=2687.633 p(99)=3710.879 max=5440.794 count=78844 min=0
+http_req_sending: count=78844 min=0.001 med=0.007 avg=0.057 p(90)=0.031 p(95)=0.058 p(99)=0.374 max=113.361
+http_req_tls_handshaking: min=0 med=0 avg=0 p(90)=0 p(95)=0 p(99)=0 max=0 count=78844
+http_req_waiting: med=359.856 avg=1768.404 p(90)=848.654 p(95)=2020.125 p(99)=30000.225 max=30282.091 count=78844 min=1.306
+http_reqs: count=78844 rate=1270.513
+http_reqs{ep:get}: count=28964 rate=466.733
+http_reqs{ep:list}: count=32416 rate=522.36
+http_reqs{ep:results}: count=17464 rate=281.419
+iteration_duration: avg=2197.519 p(90)=3290.788 p(95)=5056.416 p(99)=30000.898 max=30282.472 count=78844 min=1.358 med=539.736
+iterations: count=78844 rate=1270.513
+st_2xx: count=76995 rate=1240.717
+st_timeout: count=1849 rate=29.795
+vus: value=241 min=241 max=3000
+vus_max: max=3000 value=3000 min=415

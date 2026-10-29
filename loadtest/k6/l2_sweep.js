@@ -25,7 +25,7 @@ const scenarios = {};
 const thresholds = {};
 const perStage = [
   'http_reqs', 'http_req_duration', 'book_201_duration', 'book_end_to_end_duration', 'book_attempts',
-  'st_201', 'st_409_busy', 'st_409_already_booked', 'st_409_full', 'st_409_not_open', 'st_409_other',
+  'st_201', 'st_503_busy', 'st_409_already_booked', 'st_409_full', 'st_409_not_open', 'st_409_other',
   'st_429', 'st_5xx', 'st_timeout', 'st_network_error', 'st_other', 'iterations',
 ];
 LEVELS.forEach((vus, i) => {

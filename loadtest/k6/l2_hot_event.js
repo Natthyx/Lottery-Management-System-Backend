@@ -4,7 +4,7 @@
 // MODE=duplicates : N users, DUP parallel identical requests each (L3).
 //
 // RETRY=1 makes each request behave like a client that honours
-// "event is busy, please retry" (retry on that 409 only, jittered 5-25 ms
+// "event is busy, please retry" (retry on that 503 only, jittered 5-25 ms
 // backoff, at most MAX_ATTEMPTS). RETRY=0 sends exactly one request.
 import http from 'k6/http';
 import exec from 'k6/execution';

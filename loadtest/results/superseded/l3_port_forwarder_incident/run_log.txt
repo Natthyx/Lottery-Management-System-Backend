@@ -1,0 +1,119 @@
+[22:10:25] === init ===
+[22:10:25] fresh test stack (drops only the lottery-loadtest volume)
+ Container lt_app  Stopping
+ Container lt_app  Stopped
+ Container lt_app  Removing
+ Container lt_app  Removed
+ Container lt_redis  Stopping
+ Container lt_postgres  Stopping
+ Container lt_postgres  Stopped
+ Container lt_postgres  Removing
+ Container lt_postgres  Removed
+ Container lt_redis  Stopped
+ Container lt_redis  Removing
+ Container lt_redis  Removed
+ Network lottery-loadtest_default  Removing
+ Volume lottery-loadtest_postgres_data  Removing
+ Volume lottery-loadtest_postgres_data  Removed
+ Network lottery-loadtest_default  Removed
+#1 [internal] load local bake definitions
+#1 reading from stdin 603B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.27kB done
+#2 DONE 0.0s
+
+#3 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#3 DONE 0.4s
+
+#4 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#4 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e done
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/golang:1.22-alpine
+#5 DONE 0.3s
+
+#6 [internal] load metadata for gcr.io/distroless/static-debian12:nonroot
+#6 DONE 36.1s
+
+#7 [internal] load .dockerignore
+#7 transferring context: 2B done
+#7 DONE 0.0s
+
+#8 [stage-1 1/2] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#8 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab 0.0s done
+#8 DONE 0.0s
+
+#9 [builder 1/7] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
+#9 resolve docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 0.0s done
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context: 92.44kB 0.1s done
+#10 DONE 0.1s
+
+#11 [builder 4/7] COPY go.mod go.sum ./
+#11 CACHED
+
+#12 [builder 2/7] RUN apk add --no-cache git ca-certificates
+#12 CACHED
+
+#13 [builder 3/7] WORKDIR /src
+#13 CACHED
+
+#14 [builder 5/7] RUN --mount=type=cache,target=/go/pkg/mod     go mod download
+#14 CACHED
+
+#15 [builder 6/7] COPY . .
+#15 DONE 0.3s
+
+#16 [builder 7/7] RUN --mount=type=cache,target=/go/pkg/mod     --mount=type=cache,target=/root/.cache/go-build     CGO_ENABLED=0 GOOS=linux     go build       -trimpath       -ldflags="-w -s -X main.version=dev"       -o /out/server       ./cmd/server
+#16 DONE 0.6s
+
+#17 [stage-1 2/2] COPY --from=builder /out/server /server
+#17 CACHED
+
+#18 exporting to image
+#18 exporting layers done
+#18 exporting manifest sha256:48960b98e71122965916ddd8620d33fea4b01e3863bf2568a404fce16cc239d0 done
+#18 exporting config sha256:3f3c44d482fb587be845b439a4f7b52bcec10ec1ea463758f39b33cc0834d0cf done
+#18 exporting attestation manifest sha256:7c9b756f2c7560b7d4b019c076b93ada7fa4353cd7fe68cea8ed96256f219aff done
+#18 exporting manifest list sha256:f9533fddbdd3782a32b3cadfdefa64bf1026e8493bfeb7db30f829e915faf14e done
+#18 naming to docker.io/library/lottery-loadtest-app:latest done
+#18 unpacking to docker.io/library/lottery-loadtest-app:latest done
+#18 DONE 0.0s
+
+#19 resolving provenance for metadata file
+#19 DONE 0.0s
+ lottery-loadtest-app  Built
+ Network lottery-loadtest_default  Creating
+ Network lottery-loadtest_default  Created
+ Volume lottery-loadtest_postgres_data  Creating
+ Volume lottery-loadtest_postgres_data  Created
+ Container lt_postgres  Creating
+ Container lt_redis  Creating
+ Container lt_redis  Created
+ Container lt_postgres  Created
+ Container lt_app  Creating
+ Container lt_app  Created
+ Container lt_redis  Starting
+ Container lt_postgres  Starting
+ Container lt_postgres  Started
+ Container lt_redis  Started
+ Container lt_postgres  Waiting
+ Container lt_redis  Waiting
+ Container lt_postgres  Healthy
+ Container lt_redis  Healthy
+ Container lt_app  Starting
+ Container lt_app  Started
+[22:11:14] L1: register + login 1000 users (setup, bcrypt cost 12)
+users_requested=1000 registered_now=1000 already_existed=0 logged_in=1000 workers=8 elapsed_s=87.1
+[22:12:41] === l2 ===
+[22:12:41] warm-up
+[22:21:59] === l2u ===
+[22:21:59] warm-up
+[22:22:09] === l3 ===
+[22:22:09] warm-up
+curl: (52) Empty reply from server
+exit=4

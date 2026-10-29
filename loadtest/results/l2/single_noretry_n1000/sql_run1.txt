@@ -6,7 +6,7 @@ ORDER BY e.id
 LIMIT 20;
   section  | event_id | capacity | bookings | distinct_users 
 -----------+----------+----------+----------+----------------
- per_event |        1 |     1000 |       20 |             20
+ per_event |        1 |     1000 |     1000 |           1000
 (1 row)
 
 WITH dup AS (
@@ -22,13 +22,13 @@ SELECT 'events over capacity', (SELECT count(*) FROM over)::text,
        CASE WHEN (SELECT count(*) FROM over) = 0 THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
 SELECT 'total bookings vs client-observed 201s',
-       (SELECT n FROM tot) || ' vs ' || 20,
-       CASE WHEN 20 < 0 THEN 'SKIPPED'
-            WHEN (SELECT n FROM tot) = 20 THEN 'PASS' ELSE 'FAIL' END;
-                 check                  | observed | result 
-----------------------------------------+----------+--------
- duplicate (event,user) pairs           | 0        | PASS
- events over capacity                   | 0        | PASS
- total bookings vs client-observed 201s | 20 vs 20 | PASS
+       (SELECT n FROM tot) || ' vs ' || 1000,
+       CASE WHEN 1000 < 0 THEN 'SKIPPED'
+            WHEN (SELECT n FROM tot) = 1000 THEN 'PASS' ELSE 'FAIL' END;
+                 check                  |   observed   | result 
+----------------------------------------+--------------+--------
+ duplicate (event,user) pairs           | 0            | PASS
+ events over capacity                   | 0            | PASS
+ total bookings vs client-observed 201s | 1000 vs 1000 | PASS
 (3 rows)
 

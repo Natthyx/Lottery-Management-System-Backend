@@ -15,17 +15,17 @@ LIMIT 20;
  per_event |        7 |     1000 |     1000 |           1000
  per_event |        8 |     1000 |     1000 |           1000
  per_event |        9 |     1000 |     1000 |           1000
- per_event |       10 |     1000 |      674 |            674
- per_event |      201 |     1000 |      131 |            131
- per_event |      202 |     1000 |      141 |            141
- per_event |      203 |     1000 |      142 |            142
- per_event |      204 |     1000 |      111 |            111
- per_event |      205 |     1000 |      136 |            136
- per_event |      206 |     1000 |      107 |            107
- per_event |      207 |     1000 |      131 |            131
- per_event |      208 |     1000 |      102 |            102
- per_event |      209 |     1000 |      145 |            145
- per_event |      210 |     1000 |      137 |            137
+ per_event |       10 |     1000 |     1000 |           1000
+ per_event |       11 |     1000 |      157 |            157
+ per_event |      201 |     1000 |     1000 |           1000
+ per_event |      202 |     1000 |     1000 |           1000
+ per_event |      203 |     1000 |     1000 |           1000
+ per_event |      204 |     1000 |     1000 |           1000
+ per_event |      205 |     1000 |     1000 |           1000
+ per_event |      206 |     1000 |     1000 |           1000
+ per_event |      207 |     1000 |     1000 |           1000
+ per_event |      208 |     1000 |     1000 |           1000
+ per_event |      209 |     1000 |     1000 |           1000
 (20 rows)
 
 WITH dup AS (
@@ -41,13 +41,13 @@ SELECT 'events over capacity', (SELECT count(*) FROM over)::text,
        CASE WHEN (SELECT count(*) FROM over) = 0 THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
 SELECT 'total bookings vs client-observed 201s',
-       (SELECT n FROM tot) || ' vs ' || 33349,
-       CASE WHEN 33349 < 0 THEN 'SKIPPED'
-            WHEN (SELECT n FROM tot) = 33349 THEN 'PASS' ELSE 'FAIL' END;
-                 check                  |    observed    | result 
-----------------------------------------+----------------+--------
- duplicate (event,user) pairs           | 0              | PASS
- events over capacity                   | 0              | PASS
- total bookings vs client-observed 201s | 33349 vs 33349 | PASS
+       (SELECT n FROM tot) || ' vs ' || 105457,
+       CASE WHEN 105457 < 0 THEN 'SKIPPED'
+            WHEN (SELECT n FROM tot) = 105457 THEN 'PASS' ELSE 'FAIL' END;
+                 check                  |     observed     | result 
+----------------------------------------+------------------+--------
+ duplicate (event,user) pairs           | 0                | PASS
+ events over capacity                   | 0                | PASS
+ total bookings vs client-observed 201s | 105457 vs 105457 | PASS
 (3 rows)
 

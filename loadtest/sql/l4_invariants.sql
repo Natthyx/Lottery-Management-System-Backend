@@ -36,6 +36,9 @@ SELECT 'drawn users = booked users (symmetric difference)',
                               UNION ALL (SELECT user_id FROM b EXCEPT SELECT winner_user_id FROM d)) x) = 0
                  AND (SELECT count(DISTINCT winner_user_id) FROM d) = (SELECT count(*) FROM d) THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
+SELECT 'exactly one draw seal', (SELECT count(*) FROM lottery_draw_seals WHERE event_id = :event_id)::text,
+       CASE WHEN (SELECT count(*) FROM lottery_draw_seals WHERE event_id = :event_id) = 1 THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
 SELECT 'winner rows (rank <= winner_count)',
        (SELECT count(*) FROM d WHERE draw_rank <= (SELECT winner_count FROM e)) || ' vs ' || (SELECT winners FROM expect),
        CASE WHEN (SELECT count(*) FROM d WHERE draw_rank <= (SELECT winner_count FROM e)) = (SELECT winners FROM expect) THEN 'PASS' ELSE 'FAIL' END

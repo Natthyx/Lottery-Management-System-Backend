@@ -1,0 +1,4 @@
+{
+  "description": "L2b-unbounded hot event, N=1000 users, VUs=1000, shared-iterations, client retries busy-409 until a non-busy answer (5-25 ms jitter, cap 100000 attempts). Capacity 500.",
+  "stage_seconds": 0
+}

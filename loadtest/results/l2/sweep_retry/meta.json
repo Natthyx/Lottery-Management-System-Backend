@@ -1,4 +1,4 @@
 {
-  "description": "L2c concurrency sweep, constant-vus stages 1,5,10,25,50,100,200, 10s each, closed loop, 1000 users, all VUs of a stage on the same event. retry=1 (if 1: busy-409 retried after 5-25 ms jitter, max 200 attempts). Per-stage rates are count / 10s.",
+  "description": "L2c concurrency sweep, constant-vus stages 1,5,10,25,50,100,200, 10s each, closed loop, 1000 users, all VUs of a stage on the same event. retry=1 (if 1: busy-503 retried after 5-25 ms jitter, max 200 attempts). Per-stage rates are count / 10s.",
   "stage_seconds": 10
 }

@@ -1,0 +1,13 @@
+## 1. before: GET /results
+{"integrity":"verified","digest":"09add8c43e494fc0dcc0dba2de1fd57a4952a253231f039f8f543d354fdb6857","rank1":442}
+## 2. superuser swaps rank-1 winner with last-ranked entrant, triggers skipped, COMMITTED
+SET
+UPDATE 2
+## 3. after tampering: GET /results
+{"integrity":"mismatch","digest":"09add8c43e494fc0dcc0dba2de1fd57a4952a253231f039f8f543d354fdb6857","rank1":316}
+## 4. app log lines since step 1 (level error)
+{"level":"error","event_id":1,"sealed_digest":"09add8c43e494fc0dcc0dba2de1fd57a4952a253231f039f8f543d354fdb6857","time":"2026-10-29T19:33:52.980859139Z","message":"lottery draw does not match its seal: audit rows were altered"}
+## 5. restore (swap back), then GET /results
+SET
+UPDATE 2
+{"integrity":"verified","digest":"09add8c43e494fc0dcc0dba2de1fd57a4952a253231f039f8f543d354fdb6857","rank1":442}

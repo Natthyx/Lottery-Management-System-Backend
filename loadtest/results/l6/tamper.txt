@@ -2,52 +2,107 @@ SELECT 'baseline' AS step, count(*) AS rows, md5(string_agg(id || ':' || winner_
 FROM lottery_draws;
    step   | rows |              digest              
 ----------+------+----------------------------------
- baseline | 1000 | 83845ee07095bfe16a1aa64d9dd96ceb
-(1 row)
-
-SELECT 'A: as app role' AS step, current_user;
-      step      | current_user 
-----------------+--------------
- A: as app role | lottery
+ baseline | 1000 | 7a8d8e832e8af4875ba4569a381c687e
 (1 row)
 
 BEGIN;
 BEGIN
+SET LOCAL ROLE lottery_app;
+SET
+SELECT 'A: as runtime role' AS step, current_user;
+        step        | current_user 
+--------------------+--------------
+ A: as runtime role | lottery_app
+(1 row)
+
+SAVEPOINT s;
+SAVEPOINT
 UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
-UPDATE 1
-ROLLBACK;
+ROLLBACK TO SAVEPOINT s;
+ERROR:  42501: permission denied for table lottery_draws
+LOCATION:  aclcheck_error, aclchk.c:2812
 ROLLBACK
-BEGIN;
-BEGIN
 DELETE FROM lottery_draws WHERE id = (SELECT min(id) FROM lottery_draws);
-DELETE 1
-ROLLBACK;
+ROLLBACK TO SAVEPOINT s;
 ROLLBACK
-BEGIN;
-BEGIN
 TRUNCATE lottery_draws;
-TRUNCATE TABLE
+ERROR:  42501: permission denied for table lottery_draws
+LOCATION:  aclcheck_error, aclchk.c:2812
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+ERROR:  42501: permission denied for table lottery_draws
+LOCATION:  aclcheck_error, aclchk.c:2812
+DELETE FROM lottery_draw_seals;
+ERROR:  42501: permission denied for table lottery_draw_seals
+LOCATION:  aclcheck_error, aclchk.c:2812
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+ALTER TABLE lottery_draws DISABLE TRIGGER trg_lottery_draws_append_only;
+ERROR:  42501: must be owner of table lottery_draws
+LOCATION:  aclcheck_error, aclchk.c:2950
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+DROP TRIGGER trg_lottery_draws_append_only ON lottery_draws;
+ERROR:  42501: must be owner of relation lottery_draws
+LOCATION:  aclcheck_error, aclchk.c:2950
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+SET LOCAL session_replication_role = replica;
+ROLLBACK TO SAVEPOINT s;
+ERROR:  42501: permission denied to set parameter "session_replication_role"
+LOCATION:  set_config_option_ext, guc.c:3514
+ROLLBACK
+UPDATE events SET status = 'closed' WHERE status = 'drawn';
+ERROR:  42501: event 1 has been drawn; status, winner_count and capacity are final
+CONTEXT:  PL/pgSQL function forbid_drawn_event_change() line 12 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
 ROLLBACK;
 ROLLBACK
-BEGIN;
-BEGIN
-WITH ev AS (SELECT min(event_id) AS event_id FROM lottery_draws),
-     r1 AS (SELECT d.id, d.winner_user_id FROM lottery_draws d, ev WHERE d.event_id = ev.event_id AND d.draw_rank = 1),
-     rn AS (SELECT d.id, d.winner_user_id FROM lottery_draws d, ev WHERE d.event_id = ev.event_id
-            ORDER BY d.draw_rank DESC LIMIT 1)
-UPDATE lottery_draws t
-SET winner_user_id = CASE WHEN t.id = r1.id THEN rn.winner_user_id ELSE r1.winner_user_id END
-FROM r1, rn
-WHERE t.id IN (r1.id, rn.id);
-UPDATE 2
-SELECT 'A: rank-1 winner after swap (inside tx)' AS step, event_id, draw_rank, winner_user_id
-FROM lottery_draws WHERE event_id = (SELECT min(event_id) FROM lottery_draws) AND draw_rank = 1;
-                  step                   | event_id | draw_rank | winner_user_id 
------------------------------------------+----------+-----------+----------------
- A: rank-1 winner after swap (inside tx) |        1 |         1 |            635
+SELECT 'B: as owner/superuser' AS step, current_user;
+         step          | current_user 
+-----------------------+--------------
+ B: as owner/superuser | lottery
 (1 row)
 
+BEGIN;
+BEGIN
+SAVEPOINT s;
+SAVEPOINT
+UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
+ERROR:  42501: UPDATE on lottery_draws is not allowed: the lottery audit trail is append-only
+CONTEXT:  PL/pgSQL function forbid_audit_mutation() line 3 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+DELETE FROM lottery_draws WHERE id = (SELECT min(id) FROM lottery_draws);
+ERROR:  42501: DELETE on lottery_draws is not allowed: the lottery audit trail is append-only
+CONTEXT:  PL/pgSQL function forbid_audit_mutation() line 3 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+TRUNCATE lottery_draws;
+ROLLBACK TO SAVEPOINT s;
+ERROR:  42501: TRUNCATE on lottery_draws is not allowed: the lottery audit trail is append-only
+CONTEXT:  PL/pgSQL function forbid_audit_mutation() line 3 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ROLLBACK
+UPDATE lottery_draw_seals SET digest = 'forged';
+ERROR:  42501: UPDATE on lottery_draw_seals is not allowed: the lottery audit trail is append-only
+CONTEXT:  PL/pgSQL function forbid_audit_mutation() line 3 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+UPDATE events SET winner_count = winner_count + 1 WHERE status = 'drawn';
+ERROR:  42501: event 1 has been drawn; status, winner_count and capacity are final
+CONTEXT:  PL/pgSQL function forbid_drawn_event_change() line 12 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+UPDATE events SET status = 'closed' WHERE status = 'drawn';
 ROLLBACK;
+ERROR:  42501: event 1 has been drawn; status, winner_count and capacity are final
+CONTEXT:  PL/pgSQL function forbid_drawn_event_change() line 12 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
 ROLLBACK
 BEGIN;
 BEGIN
@@ -57,94 +112,30 @@ ALTER TABLE lottery_draws OWNER TO lt_tmp_owner;
 ALTER TABLE
 SET LOCAL ROLE lt_tmp_owner;
 SET
-SELECT 'B: as non-superuser owner' AS step, current_user, (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS is_super;
-           step            | current_user | is_super 
----------------------------+--------------+----------
- B: as non-superuser owner | lt_tmp_owner | f
+SELECT 'C: as non-superuser owner' AS step, current_user;
+           step            | current_user 
+---------------------------+--------------
+ C: as non-superuser owner | lt_tmp_owner
 (1 row)
 
-SAVEPOINT s1;
+SAVEPOINT s;
 SAVEPOINT
+UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
+ROLLBACK TO SAVEPOINT s;
+ROLLBACK
+ALTER TABLE lottery_draws DISABLE TRIGGER trg_lottery_draws_append_only;
+ERROR:  42501: UPDATE on lottery_draws is not allowed: the lottery audit trail is append-only
+CONTEXT:  PL/pgSQL function forbid_audit_mutation() line 3 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ALTER TABLE
 UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
 UPDATE 1
-ROLLBACK TO SAVEPOINT s1;
-ROLLBACK
-DELETE FROM lottery_draws WHERE id = (SELECT min(id) FROM lottery_draws);
-DELETE 1
-ROLLBACK TO SAVEPOINT s1;
-ROLLBACK
 ROLLBACK;
-ROLLBACK
-BEGIN;
-BEGIN
-CREATE ROLE lt_tmp_app NOLOGIN NOSUPERUSER;
-CREATE ROLE
-GRANT SELECT, INSERT ON lottery_draws TO lt_tmp_app;
-GRANT
-SET LOCAL ROLE lt_tmp_app;
-SET
-SELECT 'C: as non-owner with SELECT,INSERT' AS step, current_user;
-                step                | current_user 
-------------------------------------+--------------
- C: as non-owner with SELECT,INSERT | lt_tmp_app
-(1 row)
-
-SAVEPOINT s1;
-SAVEPOINT
-UPDATE lottery_draws SET winner_user_id = winner_user_id WHERE id = (SELECT min(id) FROM lottery_draws);
-ERROR:  42501: permission denied for table lottery_draws
-LOCATION:  aclcheck_error, aclchk.c:2812
-ROLLBACK TO SAVEPOINT s1;
-ROLLBACK
-DELETE FROM lottery_draws WHERE id = (SELECT min(id) FROM lottery_draws);
-ROLLBACK TO SAVEPOINT s1;
-ERROR:  42501: permission denied for table lottery_draws
-LOCATION:  aclcheck_error, aclchk.c:2812
-ROLLBACK
-ROLLBACK;
-ROLLBACK
-SELECT 'D: acl' AS step, relacl FROM pg_class WHERE relname = 'lottery_draws';
-  step  |          relacl           
---------+---------------------------
- D: acl | {lottery=arwdDxt/lottery}
-(1 row)
-
-BEGIN;
-BEGIN
-CREATE TABLE lt_tmp_control (id int);
-CREATE TABLE
-INSERT INTO lt_tmp_control VALUES (1);
-INSERT 0 1
-CREATE ROLE lt_tmp_app2 NOLOGIN NOSUPERUSER;
-CREATE ROLE
-GRANT SELECT, INSERT ON lt_tmp_control TO lt_tmp_app2;
-GRANT
-SET LOCAL ROLE lt_tmp_app2;
-SET
-SELECT 'E: control table without REVOKE, non-owner with SELECT,INSERT' AS step, current_user;
-                             step                              | current_user 
----------------------------------------------------------------+--------------
- E: control table without REVOKE, non-owner with SELECT,INSERT | lt_tmp_app2
-(1 row)
-
-SAVEPOINT s1;
-SAVEPOINT
-UPDATE lt_tmp_control SET id = 2;
-ERROR:  42501: permission denied for table lt_tmp_control
-LOCATION:  aclcheck_error, aclchk.c:2812
-ROLLBACK TO SAVEPOINT s1;
-ROLLBACK
-DELETE FROM lt_tmp_control;
-ROLLBACK TO SAVEPOINT s1;
-ROLLBACK
-ROLLBACK;
-ERROR:  42501: permission denied for table lt_tmp_control
-LOCATION:  aclcheck_error, aclchk.c:2812
 ROLLBACK
 SELECT 'after' AS step, count(*) AS rows, md5(string_agg(id || ':' || winner_user_id || ':' || draw_rank, ',' ORDER BY id)) AS digest
 FROM lottery_draws;
  step  | rows |              digest              
 -------+------+----------------------------------
- after | 1000 | 83845ee07095bfe16a1aa64d9dd96ceb
+ after | 1000 | 7a8d8e832e8af4875ba4569a381c687e
 (1 row)
 

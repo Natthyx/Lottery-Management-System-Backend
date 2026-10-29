@@ -1,4 +1,4 @@
 {
-  "description": "L3 duplicates, N=200 users, each sends 5 identical POST /book in parallel (http.batch), VUs=min(N,200). retry=1 (busy-409 retried after 5-25 ms jitter until a non-busy answer, cap 100000 attempts). Capacity 5N.",
+  "description": "L3 duplicates, N=200 users, each sends 5 identical POST /book in parallel (http.batch), VUs=min(N,200). retry=1 (busy-503 retried after 5-25 ms jitter until a non-busy answer, cap 100000 attempts). Capacity 5N. Both variants must leave exactly one booking per user.",
   "stage_seconds": 0
 }

@@ -1,4 +1,4 @@
 source=algorithm calibration: 2000 independent experiments of 5000 draws, 10 participants, 5 winners
-win frequency, textbook Pearson: p<0.05 in 1/2000 (0.05%), p<0.01 in 0/2000 (0.00%)
-win frequency, variance-adjusted: p<0.05 in 100/2000 (5.00%), p<0.01 in 16/2000 (0.80%)
-rank-1 frequency: p<0.05 in 99/2000 (4.95%), p<0.01 in 14/2000 (0.70%)
+win frequency, textbook Pearson: p<0.05 in 3/2000 (0.15%), p<0.01 in 0/2000 (0.00%)
+win frequency, variance-adjusted: p<0.05 in 104/2000 (5.20%), p<0.01 in 15/2000 (0.75%)
+rank-1 frequency: p<0.05 in 116/2000 (5.80%), p<0.01 in 20/2000 (1.00%)

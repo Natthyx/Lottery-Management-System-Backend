@@ -1,4 +1,4 @@
 {
-  "description": "L2b hot event, N=200 users, VUs=200, shared-iterations, client retries busy-409 (5-25 ms jitter, max 200 attempts, then gives up). Capacity 100.",
+  "description": "L2b hot event, N=200 users, VUs=200, shared-iterations, client retries busy-503 (5-25 ms jitter, max 200 attempts, then gives up). Capacity 100.",
   "stage_seconds": 0
 }
