@@ -20,27 +20,34 @@ sequenceDiagram
     User->>+API: POST /events/{id}/book
     API->>+BookingSvc: BookWithLock(event_id, user_id)
     
-    BookingSvc->>+Redis: SETNX lock:booking:event:{id}<br/>token=random_hex, TTL=5s
-    alt Lock Acquired
+    BookingSvc->>BookingSvc: Enter in-process per-event FIFO queue<br/>(waits in arrival order, no DB connection held)
+
+    BookingSvc->>+Redis: SET NX lock:booking:event:{id}<br/>token=random_hex, TTL=LOCK_TTL<br/>(retried with bounded jittered backoff)
+    alt Lock Acquired within LOCK_WAIT_TIMEOUT (default 10s)
         Redis-->>BookingSvc: OK (lock acquired)
-        
+
         BookingSvc->>+PostgreSQL: BEGIN TRANSACTION
         PostgreSQL-->>BookingSvc: tx started
-        
+
         BookingSvc->>PostgreSQL: SELECT status, capacity<br/>FROM events WHERE id=?<br/>FOR UPDATE
         PostgreSQL-->>BookingSvc: status='open', capacity=10
-        
+
+        alt User already booked (checked first)
+            BookingSvc-->>API: ErrAlreadyBooked
+            API-->>User: 409 already_booked
+        end
+
         alt Status is NOT 'open'
             BookingSvc-->>API: ErrEventNotOpen
-            API-->>User: 409 Conflict
+            API-->>User: 409 event_not_open
         end
-        
+
         BookingSvc->>PostgreSQL: SELECT COUNT(*)<br/>FROM bookings WHERE event_id=?
         PostgreSQL-->>BookingSvc: count=8
-        
+
         alt Count >= Capacity
             BookingSvc-->>API: ErrEventFull
-            API-->>User: 409 Conflict
+            API-->>User: 409 event_full
         end
         
         BookingSvc->>PostgreSQL: INSERT INTO bookings<br/>(event_id, user_id)
@@ -49,17 +56,19 @@ sequenceDiagram
         BookingSvc->>PostgreSQL: COMMIT
         PostgreSQL-->>-BookingSvc: committed
         
-        BookingSvc->>Redis: Lua compare-and-delete lock<br/>(owner-safe release)
+        BookingSvc->>Redis: Lua compare-and-delete lock<br/>(owner-safe release, then next queued request runs)
         Redis-->>-BookingSvc: lock released
-        
+
         BookingSvc-->>-API: Booking confirmed
         API-->>-User: 201 Created
-        
-    else Lock NOT Acquired
-        Redis-->>BookingSvc: FAILED (another request holds lock)
-        BookingSvc-->>-API: ErrEventBusy (retry)
-        API-->>-User: 409 Conflict (retry)
+
+    else Wait exceeded LOCK_WAIT_TIMEOUT
+        Redis-->>BookingSvc: still held after bounded retries
+        BookingSvc-->>-API: ErrEventBusy (retryable)
+        API-->>-User: 503 event_busy + Retry-After
     end
+
+    Note over BookingSvc,Redis: If Redis is unreachable the booking fails closed with 500:<br/>no overselling, but bookings are unavailable until Redis recovers
 
     Note over User,LotterySvc: Phase 3: Close Event (Admin)
     User->>+API: PUT /events/{id}/close
@@ -80,12 +89,17 @@ sequenceDiagram
     LotterySvc->>+PostgreSQL: BEGIN TRANSACTION
     PostgreSQL-->>LotterySvc: tx started
     
-    LotterySvc->>PostgreSQL: SELECT title, status, winner_count<br/>FROM events WHERE id=?<br/>FOR UPDATE (row lock)
-    PostgreSQL-->>LotterySvc: status='closed', winner_count=1
-    
+    LotterySvc->>PostgreSQL: SELECT title, status, winner_count,<br/>draw_at <= now()<br/>FROM events WHERE id=?<br/>FOR UPDATE (row lock)
+    PostgreSQL-->>LotterySvc: status='closed', winner_count=1, due=true
+
     alt Status NOT 'closed'
         LotterySvc-->>API: ErrEventNotClosed / ErrEventAlreadyDrawn
         API-->>User: 409 Conflict
+    end
+
+    alt draw_at not yet reached
+        LotterySvc-->>API: ErrDrawNotDue
+        API-->>User: 409 draw_not_due
     end
     
     LotterySvc->>PostgreSQL: SELECT user_id FROM bookings<br/>WHERE event_id=?<br/>ORDER BY booked_at
@@ -105,19 +119,27 @@ sequenceDiagram
         PostgreSQL-->>LotterySvc: draw record created
     end
     
+    LotterySvc->>PostgreSQL: INSERT INTO lottery_draw_seals<br/>(event_id, SHA-256 digest of full ordered outcome)
+    PostgreSQL-->>LotterySvc: seal stored (append-only)
+
     LotterySvc->>PostgreSQL: UPDATE events<br/>SET status='drawn'<br/>WHERE id=?
     PostgreSQL-->>LotterySvc: status updated
-    
+
     LotterySvc->>PostgreSQL: COMMIT
     PostgreSQL-->>-LotterySvc: committed (atomic)
-    
-    LotterySvc-->>-API: DrawResult{winners, waitlist}
-    API-->>-User: 200 OK with full results
+
+    LotterySvc->>LotterySvc: Log digest at warn level<br/>(off-database copy)
+
+    LotterySvc-->>-API: DrawResult{winners, waitlist, digest}
+    API-->>-User: 200 OK with full results + digest
 
     Note over User,LotterySvc: Phase 5: View Results (Public)
     User->>+API: GET /events/{id}/results
     API->>+LotterySvc: GetResults(event_id)
     LotterySvc->>+PostgreSQL: SELECT * FROM lottery_draws<br/>WHERE event_id=?<br/>ORDER BY draw_rank
-    PostgreSQL-->>-LotterySvc: all draw records (append-only)
-    LotterySvc-->>-API: DrawResult
-    API-->>-User: 200 OK
+    PostgreSQL-->>LotterySvc: all draw records (append-only)
+    LotterySvc->>PostgreSQL: SELECT digest FROM lottery_draw_seals
+    PostgreSQL-->>-LotterySvc: stored seal
+    LotterySvc->>LotterySvc: Recompute digest and compare
+    LotterySvc-->>-API: DrawResult + integrity
+    API-->>-User: 200 OK with integrity = verified or mismatch

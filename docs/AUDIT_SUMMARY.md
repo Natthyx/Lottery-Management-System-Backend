@@ -11,9 +11,10 @@
 
 This lottery management backend is a **production-grade Go application** demonstrating senior-level backend engineering. The system implements:
 
-✅ **Defense-in-depth concurrency control** (Redis + PostgreSQL locking)  
+✅ **Defense-in-depth concurrency control** (per-event FIFO queue + Redis lock + PostgreSQL row lock)  
 ✅ **Cryptographically secure winner selection** (crypto/rand + Fisher-Yates)  
-✅ **Immutable audit trails** (database-level permission enforcement)  
+✅ **Append-only, tamper-evident audit trail** (DB triggers for every role, least-privilege runtime role, SHA-256 draw seals)  
+✅ **Load-tested** (k6 + SQL invariant checks; results in `loadtest/REPORT.md`, local single machine)  
 ✅ **Production deployment** (Docker, Kubernetes-ready, graceful shutdown)  
 ✅ **Comprehensive testing** (unit tests with race detector, statistical fairness validation, E2E smoke tests)
 
@@ -66,21 +67,23 @@ Data Layer (PostgreSQL + Redis)
 2. **Middleware Chain:**
    - Logger captures request ID and start time
    - Recoverer wraps in panic handler
+   - Client IP resolved (forwarding headers trusted only from `TRUSTED_PROXIES`)
    - Rate limiter checks IP (100 req/min)
    - Body limit enforces 1MB max
    - Authenticate validates JWT signature
 3. **Handler:** Extracts event ID and user ID from context
 4. **Service Layer:** BookingSvc.BookWithLock
-   - **Redis Lock:** SETNX with random token, 5s TTL
+   - **Queue:** waits its turn in the event's in-process FIFO gate (bounded by `LOCK_WAIT_TIMEOUT`)
+   - **Redis Lock:** SET NX with random token, 5s TTL, backed-off bounded wait
    - **PostgreSQL TX:** BEGIN transaction
    - **Row Lock:** SELECT ... FOR UPDATE on event
-   - **Validation:** Status = 'open', capacity not exceeded
+   - **Validation:** not already booked, status = 'open', capacity not exceeded
    - **Insert:** Add booking record
    - **Commit:** COMMIT transaction
    - **Release:** Lua script deletes lock if token matches
 5. **Response:** JSON envelope with success/error
 
-**Observed Latency:** ~20-50ms without contention, ~100ms+ under high contention
+**Latency:** measured, not estimated — see `loadtest/REPORT.md` (local, single machine).
 
 ---
 
@@ -102,7 +105,8 @@ Data Layer (PostgreSQL + Redis)
 1. `users` — bcrypt passwords, role field for RBAC
 2. `events` — status machine (open/closed/drawn/cancelled)
 3. `bookings` — unique constraint on (event_id, user_id)
-4. `lottery_draws` — append-only with REVOKE UPDATE/DELETE
+4. `lottery_draws` — append-only (triggers reject UPDATE/DELETE/TRUNCATE for every role)
+5. `lottery_draw_seals` — one SHA-256 digest per draw, append-only
 
 **No N+1 Queries Found:** All queries are efficient with proper indexing
 
@@ -117,12 +121,14 @@ Data Layer (PostgreSQL + Redis)
    - Release: Lua compare-and-delete
    
 2. **Rate Limiting:**
-   - Per-IP counters via httprate library
+   - Per-IP counters via httprate library (in memory, per replica)
    - Sliding window algorithm
-   - Separate limits for auth (10/min) and API (100/min)
+   - Separate limits for auth (10/min) and API (100/min), plus a per-account login limit (10 per 15 min)
+   - Client IP is the TCP peer; `X-Forwarded-For`/`X-Real-IP` honoured only from `TRUSTED_PROXIES` (an earlier version trusted them from anyone, letting clients reset their own limit)
+   - `/health` and `/ready` are not rate limited
 
 **Connection Pool:**
-- Pool size: 20
+- Pool size: 20 (Redis)
 - Min idle: 5
 - Ping check on startup
 
@@ -134,8 +140,12 @@ Data Layer (PostgreSQL + Redis)
 
 **Critical Section:** Event booking capacity validation
 
+**Layer 0 — In-process FIFO queue per event:**
+- **Scope:** Requests within one replica wait in arrival order (no starvation), holding no DB connection
+- **Bound:** `LOCK_WAIT_TIMEOUT` (10 s) → `503 event_busy` with `Retry-After`
+
 **Layer 1 — Redis Distributed Lock:**
-- **Scope:** Serializes requests across all API replicas
+- **Scope:** Serializes requests across all API replicas (acquired with a bounded, backed-off wait)
 - **TTL:** 5 seconds (prevents indefinite holds)
 - **Token:** 16-byte random hex for owner-safe release
 - **Failure Mode:** Lock expires → next request re-validates capacity
@@ -146,12 +156,12 @@ Data Layer (PostgreSQL + Redis)
 - **Isolation:** READ COMMITTED (default)
 - **Failure Mode:** Transaction rollback → no data corruption
 
-**Why Both Layers Work:**
-- Redis fails → PostgreSQL enforces correctness
+**Why the Layers Work Together:**
+- Redis fails → bookings fail closed (500); nothing is oversold
 - Redis lock expires → PostgreSQL catches race condition
 - Direct DB access → PostgreSQL still enforces capacity
 
-**Proof of Correctness:** Under all failure scenarios, capacity constraint is enforced by PostgreSQL. Redis is a performance optimization, not a correctness dependency.
+**Correctness argument:** In every failure scenario, the capacity constraint is enforced by PostgreSQL under the row lock. Redis and the queue shape throughput and fairness; they are not what correctness depends on. Verified by integration tests and by the load-test invariants (`loadtest/REPORT.md`).
 
 ---
 
@@ -212,16 +222,20 @@ CREATE TABLE lottery_draws (
 );
 ```
 
-**Immutability Enforcement:**
+**Append-only enforcement** (`internal/db/migrations/002_harden_audit.sql`):
 ```sql
-REVOKE UPDATE, DELETE ON lottery_draws FROM PUBLIC;
+CREATE TRIGGER trg_lottery_draws_append_only BEFORE UPDATE OR DELETE ON lottery_draws
+    FOR EACH ROW EXECUTE FUNCTION forbid_audit_mutation();
+CREATE TRIGGER trg_lottery_draws_no_truncate BEFORE TRUNCATE ON lottery_draws
+    FOR EACH STATEMENT EXECUTE FUNCTION forbid_audit_mutation();
 ```
 
 **What This Means:**
-- PostgreSQL role `PUBLIC` (default for connections) cannot issue UPDATE or DELETE
-- Only INSERT is permitted
-- Even if application code is compromised, past draws cannot be altered
-- Attempts to modify raise permission error (not silent failure)
+- UPDATE, DELETE and TRUNCATE raise an error for every role, including the table owner and superusers
+- The app connects as `lottery_app`, which has only SELECT/INSERT on the audit tables and owns nothing, so it cannot disable the triggers: compromised application code cannot alter past draws
+- Each draw is sealed with a SHA-256 digest (`lottery_draw_seals`, also logged); `GET /results` recomputes it and reports `integrity: verified|mismatch`
+- **Residual risk:** whoever holds the owner/superuser credentials can disable triggers; the seal makes that detectable (shown in the load test), it does not prevent it
+- Note: an earlier version relied on `REVOKE UPDATE, DELETE ... FROM PUBLIC`, which had no effect (PUBLIC never had those privileges and the app connected as the owning superuser); the load test showed the audit rows could be changed
 
 **Audit Record Contents:**
 - Who won (user ID)
@@ -385,11 +399,11 @@ open → closed → drawn
 ✅ **Password Storage:** bcrypt cost 12, never stored plaintext  
 ✅ **JWT Security:** Algorithm whitelist, signature validation  
 ✅ **Timing Attacks:** Constant-time password comparison  
-✅ **Rate Limiting:** Per-IP limits on auth and API  
+✅ **Rate Limiting:** Per-IP limits on auth and API (spoof-resistant), per-account login limit  
 ✅ **Body Size Limits:** 1MB maximum prevents DoS  
 ✅ **Panic Recovery:** All panics logged with stack traces, return 500  
 ✅ **CORS:** Configurable allowed origins  
-✅ **Audit Immutability:** Database-level permission enforcement  
+✅ **Audit Trail:** Append-only by trigger, least-privilege runtime role, tamper-evident seals  
 
 ### Areas for Improvement (Production Deployment)
 
@@ -408,36 +422,16 @@ N/A **XSS:** Backend API only, no HTML rendering
 
 ## 🚀 Performance Characteristics
 
-### Throughput
+Earlier versions of this section listed estimated latencies and throughput. They have been removed: the load test showed
+they did not match reality (e.g. "~20 ms booking p50" vs a sub-millisecond measured median on a laptop, and contention
+behaviour that depended entirely on the lock design). Measured results, with methodology, raw data and caveats
+(local, single machine), are in [`loadtest/REPORT.md`](../loadtest/REPORT.md); the run against the earlier code is in
+[`loadtest/baseline/REPORT.md`](../loadtest/baseline/REPORT.md).
 
-**Booking Operations:**
-- Redis serializes per event: ~200 bookings/sec per event (theory)
-- Actual: depends on PostgreSQL transaction latency (~10-50ms)
-- Different events: fully concurrent (lock granularity per event)
-
-**Lottery Draw:**
-- O(n) shuffle: 1,000 participants in ~10ms
-- Transaction commit: ~20-50ms
-- Total: <100ms for typical event
-
-**Database Connection Pool:**
-- 25 max connections per replica
-- 5 min idle connections
-- Supports ~100 concurrent requests per replica (connection reuse)
-
-### Latency
-
-| Operation | Latency (p50) | Latency (p99) |
-|-----------|---------------|---------------|
-| Health check | <1ms | <5ms |
-| Readiness check | ~5ms | ~20ms |
-| User login | ~50ms | ~100ms (bcrypt) |
-| Event list | ~10ms | ~30ms |
-| Booking (no contention) | ~20ms | ~50ms |
-| Booking (high contention) | ~100ms | ~500ms |
-| Lottery draw (100 participants) | ~50ms | ~100ms |
-
-**Note:** These are estimates based on code structure. Actual performance requires load testing.
+Structural facts that do not need measuring:
+- All bookings for one event pass through one short critical section, so per-event throughput is bounded by that section and waiting time grows with the number of concurrent requests for that event.
+- Different events do not share a queue or lock.
+- pgx pool: 25 connections per replica by default (`DB_MAX_CONNS`); waiting bookings hold no connection.
 
 ---
 
@@ -523,19 +517,20 @@ System rejects requests rather than corrupting data. "Fail closed" for correctne
 ### Verified with 100% Confidence
 
 **"Built production-grade lottery backend with defense-in-depth concurrency control"**
-- Redis distributed locking: `internal/booking/service.go:62-70`
-- PostgreSQL row locking: `internal/booking/service.go:87-92`
-- Owner-safe release: `internal/booking/service.go:35-41`
+- FIFO queue per event: `internal/booking/gate.go:29-49`
+- Redis lock with bounded wait: `internal/booking/service.go:128-150`
+- PostgreSQL row locking: `internal/booking/service.go:157-215`
+- Owner-safe release: `internal/booking/service.go:36-41`
 
 **"Implemented cryptographically secure winner selection using crypto/rand and Fisher-Yates"**
 - Algorithm: `internal/lottery/algorithm.go:48-67`
 - Rationale: `internal/lottery/algorithm.go:14-26`
 - Fairness tests: `internal/lottery/algorithm_test.go:45-85`
 
-**"Designed immutable audit trail with database-level permission enforcement"**
-- Table schema: `migrations/001_init.sql:44-56`
-- REVOKE statement: `migrations/001_init.sql:61-63`
-- Atomic persistence: `internal/lottery/service.go:125-149`
+**"Designed an append-only, tamper-evident audit trail enforced in the database"**
+- Triggers and runtime-role grants: `internal/db/migrations/002_harden_audit.sql`
+- Draw seal: `internal/lottery/seal.go`, verification in `internal/lottery/service.go` (`GetResults`)
+- Tests: `internal/integration/integration_test.go` (`TestAuditTrail_*`), load test L6 (`loadtest/REPORT.md`)
 
 **"Deployed via multi-stage Docker builds targeting distroless containers"**
 - Dockerfile: `Dockerfile:1-31`
@@ -551,7 +546,7 @@ System rejects requests rather than corrupting data. "Fail closed" for correctne
 ## 🎯 Recommended Upwork Portfolio Headline
 
 **Option 1 (Technical):**
-> "Production-grade lottery backend: cryptographic winner selection, defense-in-depth concurrency control, immutable audit trails. Go, PostgreSQL, Redis."
+> "Production-grade lottery backend: cryptographic winner selection, defense-in-depth concurrency control, append-only tamper-evident audit trail. Go, PostgreSQL, Redis."
 
 **Option 2 (Business Value):**
 > "Fairness-critical lottery system preventing overselling and ensuring provably random selection for compliance."
@@ -566,9 +561,9 @@ System rejects requests rather than corrupting data. "Fail closed" for correctne
 **Overall:** Medium-High Complexity
 
 **Most Complex Areas:**
-1. **Booking concurrency control:** Dual-layer locking with failure recovery
+1. **Booking concurrency control:** FIFO queue + distributed lock + row lock, load-tested
 2. **Lottery algorithm:** Cryptographic randomness with statistical validation
-3. **Audit immutability:** Database-level permission enforcement
+3. **Audit integrity:** Append-only triggers, least-privilege role, SHA-256 seals
 4. **JWT authentication:** Algorithm validation + timing-safe comparison
 
 **Simple Areas:**
@@ -643,20 +638,20 @@ Created in this audit:
 **Standout features for portfolio:**
 1. Concurrency protection (unique, technically deep)
 2. Cryptographic fairness (compliance-ready)
-3. Audit immutability (database-level enforcement is rare)
+3. Tamper-evident audit trail (database-level enforcement plus verifiable seals)
 
 ---
 
 ## 📞 Recommended Client Talking Points
 
 **When discussing concurrency:**
-"I implemented dual-layer concurrency control — Redis for performance, PostgreSQL for correctness. Even if Redis fails completely, the system stays correct. That's defense-in-depth."
+"Bookings for a hot event queue in arrival order, then take a Redis lock across replicas, and the PostgreSQL row lock guarantees correctness. If Redis fails, bookings fail closed — nothing is ever oversold. I load-tested it: no oversell or duplicate across every run." (Numbers: `loadtest/REPORT.md`.)
 
 **When discussing security:**
 "The lottery uses the same randomness source as TLS keys — kernel entropy from crypto/rand. It's provably fair and defensible in audits. I validated it with 10,000-trial statistical tests."
 
 **When discussing compliance:**
-"Past lottery draws are immutable — not by application logic, but by database permissions. Even compromised code can't change history. That's regulatory-grade audit trails."
+"Past draws are append-only at the database level: triggers reject changes from every role, and the app's own database role can't modify or disable them, so compromised application code can't change history. Each draw is also sealed with a SHA-256 digest, so even a database superuser who bypasses the triggers gets caught. I proved both in the load test."
 
 ---
 

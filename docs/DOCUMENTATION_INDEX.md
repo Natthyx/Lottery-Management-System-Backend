@@ -12,9 +12,9 @@ docs/
 │   └── system-architecture.mmd          # High-level system architecture
 ├── diagrams/
 │   ├── lottery-workflow.mmd             # Complete workflow sequence diagram
-│   ├── concurrency-protection.mmd       # Dual-layer locking mechanism
+│   ├── concurrency-protection.mmd       # FIFO queue + Redis lock + row lock
 │   ├── winner-selection.mmd             # Crypto/rand Fisher-Yates algorithm
-│   ├── audit-trail.mmd                  # Immutable audit log design
+│   ├── audit-trail.mmd                  # Append-only, tamper-evident audit log
 │   └── deployment-architecture.mmd      # Docker + Kubernetes deployment
 ├── explanations/
 │   └── concurrency-protection.md        # Deep-dive on locking strategy
@@ -86,10 +86,10 @@ Shows complete system topology:
 
 Sequence diagram showing complete user journey:
 1. Event creation (admin)
-2. Ticket booking with concurrency protection
+2. Ticket booking with concurrency protection (queued; 503 only after a bounded wait)
 3. Event closure
-4. Lottery draw with crypto/rand
-5. Result retrieval
+4. Lottery draw with crypto/rand (refused before `draw_at`), sealed with a SHA-256 digest
+5. Result retrieval with integrity re-verification
 
 **Use case:** Explaining end-to-end flow, demonstrating business logic understanding
 
@@ -99,10 +99,11 @@ Sequence diagram showing complete user journey:
 **File:** `diagrams/concurrency-protection.mmd`
 
 Illustrates defense-in-depth locking:
-- Redis distributed lock (Layer 1)
-- PostgreSQL row lock (Layer 2)
+- In-process per-event FIFO queue (Layer 1)
+- Redis distributed lock with bounded jittered backoff (Layer 2, cross-replica)
+- PostgreSQL row lock (Layer 3, the correctness guarantee)
 - Owner-safe release mechanism
-- Retry flow for blocked requests
+- Bounded wait (`LOCK_WAIT_TIMEOUT`), then 503 `event_busy`; Redis outage fails closed (500)
 
 **Use case:** Standout technical feature, demonstrates senior-level distributed systems knowledge
 
@@ -125,9 +126,11 @@ Algorithm flowchart:
 **File:** `diagrams/audit-trail.mmd`
 
 Database-level tamper protection:
-- Append-only lottery_draws table
-- REVOKE UPDATE/DELETE permissions
+- Append-only lottery_draws and lottery_draw_seals tables (triggers block UPDATE/DELETE/TRUNCATE for every role)
+- Least-privilege runtime role `lottery_app` that cannot modify past draws or disable the triggers
+- SHA-256 draw seal re-verified by GET /results (`verified` / `mismatch`)
 - Transaction atomicity
+- Residual risk shown explicitly: owner/superuser credentials can disable triggers; not prevented, but detected by the seal
 
 **Use case:** Security/compliance discussions, demonstrating regulatory awareness
 
@@ -162,7 +165,7 @@ Infrastructure overview:
 - Security implementation
 - Deployment & infrastructure
 - Testing strategy
-- Performance characteristics
+- Performance characteristics (measured results: `loadtest/REPORT.md`, local, single machine)
 - Skills demonstrated
 
 **Tone:** Professional but accessible, balances technical depth with business value
@@ -195,7 +198,7 @@ Infrastructure overview:
 **Length:** ~1,800 words
 
 **Topics:**
-- Why two layers of locking
+- Why multiple layers of locking
 - How each layer works
 - Failure scenarios
 - Performance characteristics
@@ -246,8 +249,8 @@ concurrency control. [Attach: system-architecture diagram + case study]
 
 Key achievements:
 • Cryptographically secure winner selection (crypto/rand)
-• Zero overselling under high concurrency (dual-layer locking)
-• Immutable audit trails (database-level enforcement)
+• Zero overselling under high concurrency (queue + Redis lock + row lock)
+• Append-only, tamper-evident audit trails (database triggers + SHA-256 seal)
 
 Full case study: [link to case study]
 ```
@@ -288,7 +291,7 @@ and graceful shutdown.
 - Show statistical fairness testing
 
 **Database Questions:**
-- Explain audit trail immutability mechanism
+- Explain the append-only/tamper-evident audit mechanism (triggers, least-privilege role, seal) and its residual risk
 - Discuss transaction isolation levels
 - Demonstrate event status machine design
 
@@ -310,7 +313,7 @@ and graceful shutdown.
 
 3. **"Database-Level Audit Trails: Beyond Application Logic"**
    - Use audit-trail diagram
-   - Explain REVOKE permissions approach
+   - Explain why `REVOKE ... FROM PUBLIC` alone protects nothing, and what does: triggers, a least-privilege runtime role, and a hash seal
    - Contrast with application-level validation
 
 ---
@@ -331,7 +334,7 @@ and graceful shutdown.
 ### Portfolio Headline Options
 
 **Option 1 (Technical Focus):**
-> "Production-grade lottery backend with defense-in-depth concurrency control, cryptographically secure winner selection, and immutable audit trails. Go, PostgreSQL, Redis."
+> "Production-grade lottery backend with defense-in-depth concurrency control, cryptographically secure winner selection, and append-only, tamper-evident audit trails. Go, PostgreSQL, Redis."
 
 **Option 2 (Business Focus):**
 > "Fairness-critical lottery system preventing overselling under high concurrency and ensuring provably random winner selection for compliance."

@@ -28,7 +28,7 @@ Export as PNG with transparent background if possible, or capture with clean whi
 
 **What to capture:**
 - Render `docs/diagrams/concurrency-protection.mmd`
-- Show the dual-layer locking mechanism
+- Show the three-layer mechanism (per-event FIFO queue, Redis lock, PostgreSQL row lock)
 
 **Why it matters:**
 This is your standout technical feature. It demonstrates:
@@ -37,12 +37,13 @@ This is your standout technical feature. It demonstrates:
 - Defense-in-depth engineering
 
 **Suggested caption:**
-> "Defense-in-depth concurrency control: Redis distributed locking + PostgreSQL row-level locking prevents overselling even under infrastructure failures."
+> "Defense-in-depth concurrency control: a per-event FIFO queue, a Redis distributed lock and PostgreSQL row-level locking. Contending requests wait their turn instead of failing, and the system never oversells."
 
 **Talking points for client discussion:**
-- "This dual-layer approach ensures no overselling even if Redis fails"
-- "The system remains correct under all failure scenarios"
-- "Owner-safe lock release prevents timing vulnerabilities"
+- "Simultaneous requests queue in arrival order; a client only sees 503 `event_busy` (with Retry-After) after a bounded wait"
+- "The PostgreSQL row lock guarantees no overselling even if Redis fails — in that case bookings fail closed with 500 rather than risk correctness"
+- "Owner-safe lock release prevents one request from releasing another's lock"
+- "Measured behaviour under load: `loadtest/REPORT.md` (local, single machine)"
 
 ---
 
@@ -59,7 +60,7 @@ Shows end-to-end business flow with technical detail. Clients understand:
 - API integration points
 
 **Suggested caption:**
-> "Complete lottery workflow: event management, concurrent booking with capacity validation, cryptographically fair draw, and immutable results."
+> "Complete lottery workflow: event management, concurrent booking with capacity validation, cryptographically fair draw, and sealed, tamper-evident results."
 
 **Presentation tip:**
 If the diagram is too long, consider splitting into two screenshots:
@@ -92,8 +93,10 @@ This demonstrates specialized cryptographic knowledge:
 
 **What to capture:**
 Open `internal/booking/service.go` and capture:
-- Lines 50-75 (BookWithLock function with Redis SETNX)
-- Lines 87-114 (createBooking with SELECT FOR UPDATE)
+- Lines 71-121 (BookWithLock: FIFO gate, Redis lock, owner-safe release)
+- Lines 123-151 (acquireRedisLock with bounded jittered backoff)
+- Lines 153-216 (createBooking with SELECT FOR UPDATE)
+- Optionally `internal/booking/gate.go` lines 8-49 (per-event FIFO gate)
 
 **Format:**
 - Use VS Code with syntax highlighting
@@ -107,7 +110,7 @@ Shows actual production code quality:
 - Inline documentation
 
 **Suggested caption:**
-> "Production Go code implementing Redis distributed locking with owner-safe release and PostgreSQL row-level locking for capacity validation."
+> "Production Go code: per-event FIFO queuing, Redis distributed locking with owner-safe release, and PostgreSQL row-level locking for capacity validation."
 
 **Presentation tip:**
 Consider using Carbon (carbon.now.sh) to create a polished code screenshot with syntax highlighting.
@@ -157,9 +160,13 @@ Shows commitment to correctness:
 ## Screenshot 8: Database Schema with Audit Protection
 
 **What to capture:**
-Open `migrations/001_init.sql` and show:
-- Lines 50-68 (lottery_draws table definition)
-- Lines 70-72 (REVOKE UPDATE, DELETE statement)
+Open `internal/db/migrations/001_init.sql` lines 52-64 (lottery_draws table definition), then `internal/db/migrations/002_harden_audit.sql` and show:
+- Lines 13-29 (append-only triggers: BEFORE UPDATE/DELETE and BEFORE TRUNCATE)
+- Lines 31-49 (lottery_draw_seals table, also append-only)
+- Lines 79-97 (least-privilege runtime role `lottery_app`)
+- Optionally `internal/lottery/seal.go` (SHA-256 draw digest)
+
+Do not use the old `REVOKE ... FROM PUBLIC` line in 001 — it never provided protection.
 
 **Why it matters:**
 Unique feature demonstrating:
@@ -168,7 +175,9 @@ Unique feature demonstrating:
 - Compliance-ready design
 
 **Suggested caption:**
-> "Immutable audit trail: Database-level permissions revoke UPDATE/DELETE on draw results. Even compromised application code cannot tamper with past lotteries."
+> "Append-only, tamper-evident audit trail: database triggers block UPDATE/DELETE/TRUNCATE on draw results for every role, and the app runs as a least-privilege role that cannot disable them — so even compromised application code cannot tamper with past lotteries. Each draw is sealed with a SHA-256 digest that the results endpoint re-verifies."
+
+**Be precise if asked:** someone with the database owner/superuser credentials could still disable triggers; that is not prevented, but the seal check makes it detectable (`integrity: "mismatch"`).
 
 ---
 
@@ -291,7 +300,7 @@ Shows ease of local development:
 ### For Project Description:
 
 **Opening line:**
-"Production-grade lottery backend built with Go, featuring defense-in-depth concurrency control, cryptographically secure winner selection, and immutable audit trails."
+"Production-grade lottery backend built with Go, featuring defense-in-depth concurrency control, cryptographically secure winner selection, and append-only, tamper-evident audit trails."
 
 **Key screenshots to emphasize:**
 - Concurrency diagram → Shows senior-level distributed systems knowledge

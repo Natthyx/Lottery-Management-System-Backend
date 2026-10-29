@@ -5,65 +5,88 @@ graph TB
         REQ_C[Request C<br/>User 103 books Event 42]
     end
 
-    subgraph "Layer 1: Redis Distributed Lock"
-        REDIS_LOCK{Redis SETNX<br/>lock:booking:event:42}
-        REDIS_A[Request A acquires lock<br/>token=abc123, TTL=5s]
-        REDIS_B_WAIT[Request B: BLOCKED<br/>lock key exists]
-        REDIS_C_WAIT[Request C: BLOCKED<br/>lock key exists]
+    subgraph "Layer 1: In-process FIFO Queue (per event)"
+        GATE{Per-event gate<br/>event 42}
+        GATE_A[Request A enters gate]
+        GATE_B_WAIT[Request B: QUEUED<br/>waits in arrival order,<br/>holds no DB connection]
+        GATE_C_WAIT[Request C: QUEUED<br/>behind B]
     end
 
-    subgraph "Layer 2: PostgreSQL Transaction + Row Lock"
+    subgraph "Layer 2: Redis Distributed Lock (cross-replica)"
+        REDIS_LOCK{Redis SET NX<br/>lock:booking:event:42<br/>token=random_hex, TTL=LOCK_TTL}
+        REDIS_RETRY[Held by another replica:<br/>retry with bounded<br/>jittered backoff]
+        REDIS_A[Request A acquires lock<br/>token=abc123]
+    end
+
+    subgraph "Layer 3: PostgreSQL Transaction + Row Lock (correctness guarantee)"
         PG_TX_START[BEGIN TRANSACTION]
         PG_ROW_LOCK[SELECT status, capacity<br/>FROM events<br/>WHERE id=42<br/>FOR UPDATE]
-        PG_VALIDATE[Check:<br/>• status = 'open'<br/>• COUNT(bookings) < capacity]
+        PG_VALIDATE[Check in order:<br/>• not already booked<br/>• status = 'open'<br/>• COUNT of bookings below capacity]
         PG_INSERT[INSERT INTO bookings<br/>event_id=42, user_id=101]
         PG_COMMIT[COMMIT]
     end
 
-    subgraph "Lock Release"
-        LUA_RELEASE[Lua Script:<br/>if GET(lock_key) == token<br/>then DEL(lock_key)]
+    subgraph "Lock Release (on completion, not TTL)"
+        LUA_RELEASE[Lua Script:<br/>if GET lock_key == token<br/>then DEL lock_key]
         OWNER_SAFE[Owner-safe release:<br/>Request A can only delete<br/>its own lock]
+        GATE_LEAVE[Request A leaves gate<br/>next in queue is served]
     end
 
-    subgraph "Request B Retry Flow"
-        REQ_B_RETRY[Request B retries<br/>after A releases lock]
+    subgraph "Request B Served Next"
         REDIS_B_ACQ[Request B acquires lock<br/>token=def456]
         PG_TX_B[BEGIN TRANSACTION]
-        PG_RECHECK[Re-validate:<br/>COUNT(bookings) < capacity]
+        PG_RECHECK[Re-validate under FOR UPDATE:<br/>COUNT of bookings below capacity]
         PG_INSERT_B[INSERT booking for user 102]
         PG_COMMIT_B[COMMIT]
-        RELEASE_B[Release lock B]
+        RELEASE_B[Release lock B, leave gate]
     end
 
-    REQ_A --> REDIS_LOCK
-    REQ_B --> REDIS_LOCK
-    REQ_C --> REDIS_LOCK
-    
+    subgraph "Outcomes"
+        OK_201[201 Created]
+        FINAL_409[409 already_booked /<br/>event_full / event_not_open]
+        BUSY_503[503 event_busy + Retry-After<br/>only after LOCK_WAIT_TIMEOUT<br/>default 10s]
+        REDIS_DOWN[Redis unreachable: 500<br/>fail closed - never oversells,<br/>but bookings are unavailable]
+    end
+
+    REQ_A --> GATE
+    REQ_B --> GATE
+    REQ_C --> GATE
+
+    GATE -->|First in| GATE_A
+    GATE -->|Queued| GATE_B_WAIT
+    GATE -->|Queued| GATE_C_WAIT
+
+    GATE_A --> REDIS_LOCK
     REDIS_LOCK -->|Acquired| REDIS_A
-    REDIS_LOCK -->|Denied| REDIS_B_WAIT
-    REDIS_LOCK -->|Denied| REDIS_C_WAIT
-    
+    REDIS_LOCK -->|Busy| REDIS_RETRY
+    REDIS_RETRY -.-> REDIS_LOCK
+    REDIS_LOCK -.->|Error| REDIS_DOWN
+
     REDIS_A --> PG_TX_START
     PG_TX_START --> PG_ROW_LOCK
     PG_ROW_LOCK --> PG_VALIDATE
     PG_VALIDATE -->|Valid| PG_INSERT
+    PG_VALIDATE -->|Rejected| FINAL_409
     PG_INSERT --> PG_COMMIT
+    PG_COMMIT --> OK_201
     PG_COMMIT --> LUA_RELEASE
     LUA_RELEASE --> OWNER_SAFE
-    
-    OWNER_SAFE --> REQ_B_RETRY
-    REQ_B_RETRY --> REDIS_B_ACQ
+    OWNER_SAFE --> GATE_LEAVE
+
+    GATE_LEAVE --> REDIS_B_ACQ
+    GATE_B_WAIT -.->|Its turn| REDIS_B_ACQ
     REDIS_B_ACQ --> PG_TX_B
     PG_TX_B --> PG_RECHECK
     PG_RECHECK --> PG_INSERT_B
     PG_INSERT_B --> PG_COMMIT_B
     PG_COMMIT_B --> RELEASE_B
-    
-    REDIS_B_WAIT -.->|Wait & retry| REQ_B_RETRY
-    REDIS_C_WAIT -.->|Wait & retry| REQ_B_RETRY
 
+    GATE_C_WAIT -.->|Wait exceeds LOCK_WAIT_TIMEOUT| BUSY_503
+
+    style GATE_A fill:#90EE90
     style REDIS_A fill:#90EE90
-    style REDIS_B_WAIT fill:#FFB6C1
-    style REDIS_C_WAIT fill:#FFB6C1
+    style GATE_B_WAIT fill:#FFB6C1
+    style GATE_C_WAIT fill:#FFB6C1
     style PG_ROW_LOCK fill:#FFD700
     style OWNER_SAFE fill:#87CEEB
+    style REDIS_DOWN fill:#FF6347,color:#fff
